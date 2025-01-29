@@ -116,6 +116,19 @@ namespace Services
             await _userRepository.UpdateAsync(user);
         }
 
+        public async Task<UserDTO> GetUserByUsernameAsync(string username)
+        {
+            // Call the UserRepository method to get the user
+            var user = await _userRepository.GetByUsernameAsync(username);
+
+            // If user not found, return null
+            if (user == null) return null;
+
+            // Map the User entity to a UserDTO and return it
+            return MapToDTO(user);
+        }
+
+
         // ----------------------------------------------------------
         // PRIVATE HELPER
         // ----------------------------------------------------------

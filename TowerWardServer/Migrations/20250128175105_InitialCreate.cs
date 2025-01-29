@@ -56,6 +56,30 @@ namespace TowerWardServer.Migrations
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateTable(
+                name: "authentications",
+                columns: table => new
+                {
+                    AuthId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                    UserId = table.Column<int>(type: "int", nullable: false),
+                    RefreshToken = table.Column<string>(type: "longtext", nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    ExpiryTime = table.Column<DateTime>(type: "datetime(6)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_authentications", x => x.AuthId);
+                    table.ForeignKey(
+                        name: "FK_authentications_users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "users",
+                        principalColumn: "UserId",
+                        onDelete: ReferentialAction.Cascade);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateTable(
                 name: "game_sessions",
                 columns: table => new
                 {
@@ -115,6 +139,11 @@ namespace TowerWardServer.Migrations
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateIndex(
+                name: "IX_authentications_UserId",
+                table: "authentications",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_game_sessions_User1Id",
                 table: "game_sessions",
                 column: "User1Id");
@@ -128,6 +157,9 @@ namespace TowerWardServer.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "authentications");
+
             migrationBuilder.DropTable(
                 name: "game_sessions");
 

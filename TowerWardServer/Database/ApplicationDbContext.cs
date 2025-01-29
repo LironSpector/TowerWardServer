@@ -15,6 +15,9 @@ namespace Database
         public DbSet<GameSession> GameSessions { get; set; }
         public DbSet<GlobalGameStats> GlobalGameStats { get; set; }
 
+        // Add this line:
+        public DbSet<Authentication> Authentications { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -66,6 +69,19 @@ namespace Database
             {
                 entity.ToTable("global_game_stats");
                 entity.HasKey(g => g.Id);
+            });
+
+            // Optionally, config for Authentication:
+            modelBuilder.Entity<Authentication>(entity =>
+            {
+                entity.ToTable("authentications"); // or name it something else if you prefer
+                entity.HasKey(a => a.AuthId);
+
+                // If you want a foreign key
+                entity.HasOne(a => a.User)
+                      .WithMany() // or .WithOne() if it's a 1-to-1
+                      .HasForeignKey(a => a.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

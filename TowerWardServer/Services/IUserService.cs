@@ -21,5 +21,7 @@ namespace Services
         Task UpdateLastLoginAsync(int userId);
         Task BanUserAsync(int userId);
         Task UnbanUserAsync(int userId);
+
+        Task<UserDTO> GetUserByUsernameAsync(string username);
     }
 }

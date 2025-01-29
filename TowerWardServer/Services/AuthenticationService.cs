@@ -35,15 +35,23 @@ namespace Services
         {
             // 1) Get user by username
             var user = await _userRepository.GetByUsernameAsync(username);
+            Console.WriteLine("EEE: ", user == null);
             if (user == null) return null;
+
+            Console.WriteLine("FFF");
 
             // 2) Check password with BCrypt
             bool valid = BCrypt.Net.BCrypt.Verify(password, user.Password);
+            Console.WriteLine("GGG");
             if (!valid) return null;
+
+            Console.WriteLine("HHH");
 
             // 3) Generate tokens
             var (accessToken, accessExpires) = GenerateAccessToken(user.UserId);
+            Console.WriteLine("III");
             var (refreshToken, refreshExpires) = GenerateRefreshToken();
+            Console.WriteLine("JJJ");
 
             // 4) Save refresh token in DB
             var authRecord = new Authentication
@@ -53,7 +61,9 @@ namespace Services
                 ExpiryTime = refreshExpires,
                 CreatedAt = DateTime.UtcNow
             };
+            Console.WriteLine("KKK");
             await _authRepo.AddAsync(authRecord);
+            Console.WriteLine("LLL");
 
             // 5) Return tokens
             return new AuthResponseDTO

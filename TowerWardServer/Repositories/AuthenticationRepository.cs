@@ -37,8 +37,11 @@ namespace Repositories
 
         public async Task AddAsync(Authentication authRecord)
         {
+            Console.WriteLine("ZAZA");
             await _context.Set<Authentication>().AddAsync(authRecord);
+            Console.WriteLine("ZBZB");
             await _context.SaveChangesAsync();
+            Console.WriteLine("ZCZC");
         }
 
         public async Task UpdateAsync(Authentication authRecord)

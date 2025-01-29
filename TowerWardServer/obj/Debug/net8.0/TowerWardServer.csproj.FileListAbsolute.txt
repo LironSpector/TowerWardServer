@@ -200,3 +200,4 @@ C:\Users\gilsp\Documents\Spector Family\Liron\Programming\TowerWardServer\TowerW
 C:\Users\gilsp\Documents\Spector Family\Liron\Programming\TowerWardServer\TowerWardServer\obj\Debug\net8.0\staticwebassets\msbuild.buildTransitive.TowerWardServer.props
 C:\Users\gilsp\Documents\Spector Family\Liron\Programming\TowerWardServer\TowerWardServer\obj\Debug\net8.0\staticwebassets.pack.json
 C:\Users\gilsp\Documents\Spector Family\Liron\Programming\TowerWardServer\TowerWardServer\obj\Debug\net8.0\scopedcss\bundle\TowerWardServer.styles.css
+C:\Users\gilsp\Documents\Spector Family\Liron\Programming\TowerWardServer\TowerWardServer\obj\Debug\net8.0\TowerWardServer.sourcelink.json

@@ -24,6 +24,7 @@ namespace Repositories
 
         public async Task<User> GetByUsernameAsync(string username)
         {
+            Console.WriteLine("XXX");
             return await _context.Users
                 .Include(u => u.UserGameStats)
                 .FirstOrDefaultAsync(u => u.Username == username);

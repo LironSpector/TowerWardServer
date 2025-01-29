@@ -9,6 +9,11 @@ using Newtonsoft.Json.Linq;
 using Microsoft.AspNetCore.Hosting.Server;
 using System.ComponentModel;
 using System.Security.Cryptography;
+using Services;
+using DTOs;
+using Models;
+using Repositories;
+using Microsoft.Extensions.DependencyInjection; // for CreateScope()
 
 namespace TcpServer
 {
@@ -19,9 +24,31 @@ namespace TcpServer
         private Queue<ClientHandler> _waitingClients = new Queue<ClientHandler>();
         private readonly int _port;
 
-        public GameTcpServer(int port)
+        // We store references to the services
+        //private readonly IUserService _userService;
+        //private readonly IAuthenticationService _authService;
+
+        // We no longer store IUserService, IAuthenticationService directly here.
+        // Instead, we store the *root* IServiceProvider:
+        private readonly IServiceProvider _rootProvider;
+
+
+        //public GameTcpServer(int port)
+        //{
+        //    _port = port;
+        //}
+
+        //public GameTcpServer(int port, IUserService userService, IAuthenticationService authService)
+        //{
+        //    _port = port;
+        //    _userService = userService;
+        //    _authService = authService;
+        //}
+
+        public GameTcpServer(int port, IServiceProvider rootProvider)
         {
             _port = port;
+            _rootProvider = rootProvider;
         }
 
         public void Start()
@@ -35,7 +62,14 @@ namespace TcpServer
                 TcpClient clientSocket = _tcpListener.AcceptTcpClient();
                 Console.WriteLine("Client connected!");
 
-                ClientHandler clientHandler = new ClientHandler(clientSocket, this);
+                //ClientHandler clientHandler = new ClientHandler(clientSocket, this);
+
+                // Pass service references to the ClientHandler constructor
+                //ClientHandler clientHandler = new ClientHandler(clientSocket, this, _userService, _authService);
+
+                ClientHandler clientHandler = new ClientHandler(clientSocket, this, _rootProvider);
+
+
                 lock (_clients)
                 {
                     _clients.Add(clientHandler);
@@ -122,17 +156,58 @@ namespace TcpServer
         private bool _handshakeCompleted = false;
         // --- end encryption fields ---
 
-        public ClientHandler(TcpClient clientSocket, GameTcpServer server)
+
+        // Services
+        //private readonly IUserService _userService;
+        //private readonly IAuthenticationService _authService;
+
+        // We store the *root* provider
+        private readonly IServiceProvider _rootProvider;
+
+
+        //public ClientHandler(TcpClient clientSocket, GameTcpServer server)
+        //{
+        //    _clientSocket = clientSocket;
+        //    _server = server;
+        //    _stream = clientSocket.GetStream();
+
+        //    // Generate a unique RSA key pair for this connection
+        //    _rsa = RSA.Create(2048); // 2048-bit for better security
+
+        //    // As soon as we create this handler, send our RSA public key to the client (unencrypted)
+        //    // The client will parse it to encrypt its AES key+IV
+        //    SendPublicKey();
+        //}
+
+        //public ClientHandler(TcpClient clientSocket, GameTcpServer server,
+        //             IUserService userService, IAuthenticationService authService)
+        //{
+        //    _clientSocket = clientSocket;
+        //    _server = server;
+        //    _stream = clientSocket.GetStream();
+
+        //    _userService = userService;
+        //    _authService = authService;
+
+        //    // Generate a unique RSA key pair for this connection
+        //    _rsa = RSA.Create(2048); // 2048-bit for better security
+
+        //    // Immediately send public key
+        //    SendPublicKey();
+        //}
+
+        public ClientHandler(TcpClient clientSocket, GameTcpServer server, IServiceProvider rootProvider)
         {
             _clientSocket = clientSocket;
             _server = server;
             _stream = clientSocket.GetStream();
 
+            _rootProvider = rootProvider;
+
             // Generate a unique RSA key pair for this connection
             _rsa = RSA.Create(2048); // 2048-bit for better security
 
-            // As soon as we create this handler, send our RSA public key to the client (unencrypted)
-            // The client will parse it to encrypt its AES key+IV
+            // Immediately send public key
             SendPublicKey();
         }
 
@@ -213,15 +288,12 @@ namespace TcpServer
 
             if (msgType == "AESKeyExchange")
             {
-                Console.WriteLine("AA");
                 string encKeyBase64 = jo["EncryptedKey"].ToString();
                 string encIVBase64 = jo["EncryptedIV"].ToString();
-                Console.WriteLine("BB");
 
                 // Decrypt with our private RSA
                 byte[] encKey = Convert.FromBase64String(encKeyBase64);
                 byte[] encIV = Convert.FromBase64String(encIVBase64);
-                Console.WriteLine("CC");
 
                 //_aesKey = _rsa.Decrypt(encKey, RSAEncryptionPadding.OaepSHA256);
                 //_aesIV = _rsa.Decrypt(encIV, RSAEncryptionPadding.OaepSHA256);
@@ -333,6 +405,13 @@ namespace TcpServer
                     }
                     break;
 
+                case "RegisterUser":
+                    HandleRegisterUser(messageObject);
+                    break;
+                case "LoginUser":
+                    HandleLoginUser(messageObject);
+                    break;
+
                 default:
                     Console.WriteLine("Unknown message type received: " + messageType);
                     break;
@@ -391,6 +470,239 @@ namespace TcpServer
             _stream.Write(lengthBytes, 0, lengthBytes.Length);
             _stream.Write(messageBytes, 0, messageBytes.Length);
         }
+
+
+        // ---------------
+        // NEW: REGISTER / LOGIN
+        // ---------------
+
+        //private async void HandleRegisterUser(JObject messageObject)
+        //{
+        //    // message: { "Type":"RegisterUser", "Data":{ "Username":"...", "Password":"..." } }
+        //    JObject dataObj = (JObject)messageObject["Data"];
+        //    string username = dataObj["Username"].ToString();
+        //    string password = dataObj["Password"].ToString();
+        //    // optional: avatar or other fields
+
+        //    try
+        //    {
+        //        // 1) Check if user already exists
+        //        //var existingUser = await _userService.GetByUsernameAsync(username);
+        //        var existingUser = await _userService.GetUserByUsernameAsync(username);
+        //        if (existingUser != null)
+        //        {
+        //            // Return RegisterFail
+        //            string fail = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Username already taken\"}}";
+        //            SendEncryptedMessage(fail);
+        //            return;
+        //        }
+
+        //        // 2) Create user
+        //        int newUserId = await _userService.CreateUserAsync(new CreateUserDTO
+        //        {
+        //            Username = username,
+        //            Password = password,
+        //            Avatar = null // or pass some field
+        //        });
+
+        //        // 3) Auto login after register
+        //        var authResp = await _authService.LoginAsync(username, password);
+        //        if (authResp == null)
+        //        {
+        //            string fail2 = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Could not auto-login\"}}";
+        //            SendEncryptedMessage(fail2);
+        //            return;
+        //        }
+
+        //        // 4) Return "RegisterSuccess"
+        //        var success = new
+        //        {
+        //            Type = "RegisterSuccess",
+        //            Data = new
+        //            {
+        //                AccessToken = authResp.AccessToken,
+        //                AccessTokenExpiry = authResp.AccessTokenExpiry,
+        //                RefreshToken = authResp.RefreshToken,
+        //                RefreshTokenExpiry = authResp.RefreshTokenExpiry
+        //            }
+        //        };
+        //        string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
+        //        SendEncryptedMessage(successJson);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        string error = $"{{\"Type\":\"RegisterFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+        //        SendEncryptedMessage(error);
+        //    }
+        //}
+
+        //private async void HandleLoginUser(JObject messageObject)
+        //{
+        //    // { "Type":"LoginUser","Data":{"Username":"...","Password":"..."}}
+        //    JObject dataObj = (JObject)messageObject["Data"];
+        //    string username = dataObj["Username"].ToString();
+        //    string password = dataObj["Password"].ToString();
+        //    Console.WriteLine("AAA");
+        //    try
+        //    {
+        //        Console.WriteLine("BBB");
+        //        var authResp = await _authService.LoginAsync(username, password);
+        //        Console.WriteLine("CCC");
+        //        if (authResp == null)
+        //        {
+        //            // Means invalid credentials or user not found
+        //            // Return "LoginFail"
+        //            string fail =
+        //              "{\"Type\":\"LoginFail\",\"Data\":{\"Reason\":\"The Username or Password is Incorrect. Try again\"}}";
+        //            SendEncryptedMessage(fail);
+        //            return;
+        //        }
+
+        //        // success
+        //        var success = new
+        //        {
+        //            Type = "LoginSuccess",
+        //            Data = new
+        //            {
+        //                AccessToken = authResp.AccessToken,
+        //                AccessTokenExpiry = authResp.AccessTokenExpiry,
+        //                RefreshToken = authResp.RefreshToken,
+        //                RefreshTokenExpiry = authResp.RefreshTokenExpiry
+        //            }
+        //        };
+        //        string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
+        //        SendEncryptedMessage(successJson);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        // e.g. DB error
+        //        string fail =
+        //          $"{{\"Type\":\"LoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+        //        SendEncryptedMessage(fail);
+        //    }
+        //}
+
+
+
+        // -----------------------------------------------------
+        // CREATE A SCOPE FOR DB CALLS
+        // -----------------------------------------------------
+
+        private async void HandleRegisterUser(JObject msgObj)
+        {
+            // { "Type":"RegisterUser", "Data": {"Username":"...","Password":"..."}}
+            JObject dataObj = (JObject)msgObj["Data"];
+            string username = dataObj["Username"].ToString();
+            string password = dataObj["Password"].ToString();
+
+            // 1) Create a new scope
+            using (var scope = _rootProvider.CreateScope())
+            {
+                // 2) Resolve the services
+                var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+                var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+                try
+                {
+                    // Check if user exists
+                    Console.WriteLine("TTTTTTTTTTT");
+                    var existingUser = await userService.GetUserByUsernameAsync(username);
+                    if (existingUser != null)
+                    {
+                        string fail = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Username already taken\"}}";
+                        SendEncryptedMessage(fail);
+                        return;
+                    }
+
+                    Console.WriteLine("UUUUUUUUUUU");
+                    // Create user
+                    int userId = await userService.CreateUserAsync(new DTOs.CreateUserDTO
+                    {
+                        Username = username,
+                        Password = password,
+                        Avatar = "temp_avatar.png"
+                        //Avatar = null // or pass some field
+                    });
+                    Console.WriteLine("VVVVVVVVVVVV");
+                    // Auto-login
+                    var authResp = await authService.LoginAsync(username, password);
+                    if (authResp == null)
+                    {
+                        string fail2 = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Could not auto-login\"}}";
+                        SendEncryptedMessage(fail2);
+                        return;
+                    }
+
+                    var success = new
+                    {
+                        Type = "RegisterSuccess",
+                        Data = new
+                        {
+                            AccessToken = authResp.AccessToken,
+                            AccessTokenExpiry = authResp.AccessTokenExpiry,
+                            RefreshToken = authResp.RefreshToken,
+                            RefreshTokenExpiry = authResp.RefreshTokenExpiry
+                        }
+                    };
+                    string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
+                    SendEncryptedMessage(successJson);
+                }
+                catch (Exception ex)
+                {
+                    string error = $"{{\"Type\":\"RegisterFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+                    SendEncryptedMessage(error);
+                }
+            } // scope disposed here
+        }
+
+        private async void HandleLoginUser(JObject msgObj)
+        {
+            // { "Type":"LoginUser","Data": {"Username":"...","Password":"..."}}
+            JObject dataObj = (JObject)msgObj["Data"];
+            string username = dataObj["Username"].ToString();
+            string password = dataObj["Password"].ToString();
+
+            using (var scope = _rootProvider.CreateScope())
+            {
+                var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+                try
+                {
+                    var authResp = await authService.LoginAsync(username, password);
+                    if (authResp == null)
+                    {
+                        string fail =
+                          "{\"Type\":\"LoginFail\",\"Data\":{\"Reason\":\"The Username or Password is Incorrect. Try again\"}}";
+                        SendEncryptedMessage(fail);
+                        return;
+                    }
+
+                    var success = new
+                    {
+                        Type = "LoginSuccess",
+                        Data = new
+                        {
+                            AccessToken = authResp.AccessToken,
+                            AccessTokenExpiry = authResp.AccessTokenExpiry,
+                            RefreshToken = authResp.RefreshToken,
+                            RefreshTokenExpiry = authResp.RefreshTokenExpiry
+                        }
+                    };
+                    string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
+                    SendEncryptedMessage(successJson);
+                }
+                catch (Exception ex)
+                {
+                    string fail =
+                      $"{{\"Type\":\"LoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+                    SendEncryptedMessage(fail);
+                }
+            } // scope disposed
+        }
+
+
+
+
 
         public void SetOpponent(ClientHandler opponent)
         {

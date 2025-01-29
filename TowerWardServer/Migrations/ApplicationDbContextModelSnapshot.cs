@@ -22,6 +22,34 @@ namespace TowerWardServer.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("Models.Authentication", b =>
+                {
+                    b.Property<int>("AuthId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("AuthId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("ExpiryTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("RefreshToken")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AuthId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("authentications", (string)null);
+                });
+
             modelBuilder.Entity("Models.GameSession", b =>
                 {
                     b.Property<int>("SessionId")
@@ -154,6 +182,17 @@ namespace TowerWardServer.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("user_game_stats", (string)null);
+                });
+
+            modelBuilder.Entity("Models.Authentication", b =>
+                {
+                    b.HasOne("Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Models.GameSession", b =>
