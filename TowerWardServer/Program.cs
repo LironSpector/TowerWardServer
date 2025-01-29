@@ -76,11 +76,6 @@ namespace GameSolution
             builder.Services.AddScoped<IGlobalGameStatsService, GlobalGameStatsService>();
             builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 
-            // Example: If I have a user creation step or initialization, I can do so here.
-
-
-
-
 
             builder.Services.AddCors(options =>
             {
@@ -122,59 +117,20 @@ namespace GameSolution
 
 
 
-
-            // 5) Start the TCP server in a background thread
-            //var tcpPort = 5555; // same port you used previously
-            //var gameTcpServer = new GameTcpServer(tcpPort);
-
-            //var tcpServerThread = new Thread(() =>
-            //{
-            //    // This runs the Start() method in the background so the main thread is free
-            //    gameTcpServer.Start();
-            //});
-            //tcpServerThread.IsBackground = true;
-            //tcpServerThread.Start();
-
-
-
-            //    so we can pass them to the TCP server
-            //using (var scope = app.Services.CreateScope())
-            //{
-            //    var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-            //    var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
-            //    // etc if needed
-
-            //    // 4) Create TCP server instance
-            //    var tcpPort = 5555;
-            //    var gameTcpServer = new GameTcpServer(tcpPort, userService, authService /* any other services needed */);
-
-            //    // 5) Start the TCP server in a background thread
-            //    var tcpThread = new Thread(() => gameTcpServer.Start());
-            //    tcpThread.IsBackground = true;
-            //    tcpThread.Start();
-            //}
-
-
-
-            //var userService = app.Services.GetRequiredService<IUserService>();
-            //var authService = app.Services.GetRequiredService<IAuthenticationService>();
-
-            // 4) Create TCP server instance
+            // 5) Create TCP server instance
             var tcpPort = 5555;
-            //var gameTcpServer = new GameTcpServer(tcpPort, userService, authService);
-            //var rootProvider = app.Services;
             IServiceProvider rootProvider = app.Services;
             var gameTcpServer = new GameTcpServer(tcpPort, rootProvider);
 
-            // 5) Start the TCP server in a background thread
-            var tcpServerThread = new Thread(() => gameTcpServer.Start());
+            // 6) Start the TCP server in a background thread
+            var tcpServerThread = new Thread(() => gameTcpServer.Start()); // This runs the Start() method in the background so the main thread is free
             tcpServerThread.IsBackground = true;
             tcpServerThread.Start();
 
 
 
 
-            // 6) Run the ASP.NET Core Web server (blocking call on main thread)
+            // 7) Run the ASP.NET Core Web server (blocking call on main thread)
             app.Run();
 
             // If you want, after app.Run() completes (usually on shutdown), you can do clean-up:

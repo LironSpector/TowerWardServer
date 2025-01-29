@@ -24,26 +24,9 @@ namespace TcpServer
         private Queue<ClientHandler> _waitingClients = new Queue<ClientHandler>();
         private readonly int _port;
 
-        // We store references to the services
-        //private readonly IUserService _userService;
-        //private readonly IAuthenticationService _authService;
-
         // We no longer store IUserService, IAuthenticationService directly here.
         // Instead, we store the *root* IServiceProvider:
         private readonly IServiceProvider _rootProvider;
-
-
-        //public GameTcpServer(int port)
-        //{
-        //    _port = port;
-        //}
-
-        //public GameTcpServer(int port, IUserService userService, IAuthenticationService authService)
-        //{
-        //    _port = port;
-        //    _userService = userService;
-        //    _authService = authService;
-        //}
 
         public GameTcpServer(int port, IServiceProvider rootProvider)
         {
@@ -61,11 +44,6 @@ namespace TcpServer
             {
                 TcpClient clientSocket = _tcpListener.AcceptTcpClient();
                 Console.WriteLine("Client connected!");
-
-                //ClientHandler clientHandler = new ClientHandler(clientSocket, this);
-
-                // Pass service references to the ClientHandler constructor
-                //ClientHandler clientHandler = new ClientHandler(clientSocket, this, _userService, _authService);
 
                 ClientHandler clientHandler = new ClientHandler(clientSocket, this, _rootProvider);
 
@@ -157,44 +135,8 @@ namespace TcpServer
         // --- end encryption fields ---
 
 
-        // Services
-        //private readonly IUserService _userService;
-        //private readonly IAuthenticationService _authService;
-
         // We store the *root* provider
         private readonly IServiceProvider _rootProvider;
-
-
-        //public ClientHandler(TcpClient clientSocket, GameTcpServer server)
-        //{
-        //    _clientSocket = clientSocket;
-        //    _server = server;
-        //    _stream = clientSocket.GetStream();
-
-        //    // Generate a unique RSA key pair for this connection
-        //    _rsa = RSA.Create(2048); // 2048-bit for better security
-
-        //    // As soon as we create this handler, send our RSA public key to the client (unencrypted)
-        //    // The client will parse it to encrypt its AES key+IV
-        //    SendPublicKey();
-        //}
-
-        //public ClientHandler(TcpClient clientSocket, GameTcpServer server,
-        //             IUserService userService, IAuthenticationService authService)
-        //{
-        //    _clientSocket = clientSocket;
-        //    _server = server;
-        //    _stream = clientSocket.GetStream();
-
-        //    _userService = userService;
-        //    _authService = authService;
-
-        //    // Generate a unique RSA key pair for this connection
-        //    _rsa = RSA.Create(2048); // 2048-bit for better security
-
-        //    // Immediately send public key
-        //    SendPublicKey();
-        //}
 
         public ClientHandler(TcpClient clientSocket, GameTcpServer server, IServiceProvider rootProvider)
         {
@@ -412,11 +354,21 @@ namespace TcpServer
                     HandleLoginUser(messageObject);
                     break;
 
+                case "UpdateLastLogin":
+                    {
+                        JObject dataObj = (JObject)messageObject["Data"];
+                        int userId = dataObj["UserId"].ToObject<int>();
+
+                        HandleUpdateLastLogin(userId);
+                        break;
+                    }
+
                 default:
                     Console.WriteLine("Unknown message type received: " + messageType);
                     break;
             }
         }
+
 
         /// <summary>
         /// Send the RSA public key unencrypted (in the handshake phase).
@@ -472,118 +424,6 @@ namespace TcpServer
         }
 
 
-        // ---------------
-        // NEW: REGISTER / LOGIN
-        // ---------------
-
-        //private async void HandleRegisterUser(JObject messageObject)
-        //{
-        //    // message: { "Type":"RegisterUser", "Data":{ "Username":"...", "Password":"..." } }
-        //    JObject dataObj = (JObject)messageObject["Data"];
-        //    string username = dataObj["Username"].ToString();
-        //    string password = dataObj["Password"].ToString();
-        //    // optional: avatar or other fields
-
-        //    try
-        //    {
-        //        // 1) Check if user already exists
-        //        //var existingUser = await _userService.GetByUsernameAsync(username);
-        //        var existingUser = await _userService.GetUserByUsernameAsync(username);
-        //        if (existingUser != null)
-        //        {
-        //            // Return RegisterFail
-        //            string fail = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Username already taken\"}}";
-        //            SendEncryptedMessage(fail);
-        //            return;
-        //        }
-
-        //        // 2) Create user
-        //        int newUserId = await _userService.CreateUserAsync(new CreateUserDTO
-        //        {
-        //            Username = username,
-        //            Password = password,
-        //            Avatar = null // or pass some field
-        //        });
-
-        //        // 3) Auto login after register
-        //        var authResp = await _authService.LoginAsync(username, password);
-        //        if (authResp == null)
-        //        {
-        //            string fail2 = "{\"Type\":\"RegisterFail\",\"Data\":{\"Reason\":\"Could not auto-login\"}}";
-        //            SendEncryptedMessage(fail2);
-        //            return;
-        //        }
-
-        //        // 4) Return "RegisterSuccess"
-        //        var success = new
-        //        {
-        //            Type = "RegisterSuccess",
-        //            Data = new
-        //            {
-        //                AccessToken = authResp.AccessToken,
-        //                AccessTokenExpiry = authResp.AccessTokenExpiry,
-        //                RefreshToken = authResp.RefreshToken,
-        //                RefreshTokenExpiry = authResp.RefreshTokenExpiry
-        //            }
-        //        };
-        //        string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
-        //        SendEncryptedMessage(successJson);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        string error = $"{{\"Type\":\"RegisterFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
-        //        SendEncryptedMessage(error);
-        //    }
-        //}
-
-        //private async void HandleLoginUser(JObject messageObject)
-        //{
-        //    // { "Type":"LoginUser","Data":{"Username":"...","Password":"..."}}
-        //    JObject dataObj = (JObject)messageObject["Data"];
-        //    string username = dataObj["Username"].ToString();
-        //    string password = dataObj["Password"].ToString();
-        //    Console.WriteLine("AAA");
-        //    try
-        //    {
-        //        Console.WriteLine("BBB");
-        //        var authResp = await _authService.LoginAsync(username, password);
-        //        Console.WriteLine("CCC");
-        //        if (authResp == null)
-        //        {
-        //            // Means invalid credentials or user not found
-        //            // Return "LoginFail"
-        //            string fail =
-        //              "{\"Type\":\"LoginFail\",\"Data\":{\"Reason\":\"The Username or Password is Incorrect. Try again\"}}";
-        //            SendEncryptedMessage(fail);
-        //            return;
-        //        }
-
-        //        // success
-        //        var success = new
-        //        {
-        //            Type = "LoginSuccess",
-        //            Data = new
-        //            {
-        //                AccessToken = authResp.AccessToken,
-        //                AccessTokenExpiry = authResp.AccessTokenExpiry,
-        //                RefreshToken = authResp.RefreshToken,
-        //                RefreshTokenExpiry = authResp.RefreshTokenExpiry
-        //            }
-        //        };
-        //        string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(success);
-        //        SendEncryptedMessage(successJson);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // e.g. DB error
-        //        string fail =
-        //          $"{{\"Type\":\"LoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
-        //        SendEncryptedMessage(fail);
-        //    }
-        //}
-
-
-
         // -----------------------------------------------------
         // CREATE A SCOPE FOR DB CALLS
         // -----------------------------------------------------
@@ -601,11 +441,11 @@ namespace TcpServer
                 // 2) Resolve the services
                 var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
                 var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+                var globalStatsService = scope.ServiceProvider.GetRequiredService<IGlobalGameStatsService>();
 
                 try
                 {
                     // Check if user exists
-                    Console.WriteLine("TTTTTTTTTTT");
                     var existingUser = await userService.GetUserByUsernameAsync(username);
                     if (existingUser != null)
                     {
@@ -614,7 +454,6 @@ namespace TcpServer
                         return;
                     }
 
-                    Console.WriteLine("UUUUUUUUUUU");
                     // Create user
                     int userId = await userService.CreateUserAsync(new DTOs.CreateUserDTO
                     {
@@ -623,6 +462,10 @@ namespace TcpServer
                         Avatar = "temp_avatar.png"
                         //Avatar = null // or pass some field
                     });
+
+                    // Increment total_users in global_game_stats (assuming ID=1 is the primary row)
+                    await globalStatsService.IncrementTotalUsersAsync(1, 1);
+
                     Console.WriteLine("VVVVVVVVVVVV");
                     // Auto-login
                     var authResp = await authService.LoginAsync(username, password);
@@ -638,6 +481,7 @@ namespace TcpServer
                         Type = "RegisterSuccess",
                         Data = new
                         {
+                            UserId = userId,
                             AccessToken = authResp.AccessToken,
                             AccessTokenExpiry = authResp.AccessTokenExpiry,
                             RefreshToken = authResp.RefreshToken,
@@ -665,6 +509,7 @@ namespace TcpServer
             using (var scope = _rootProvider.CreateScope())
             {
                 var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+                var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
 
                 try
                 {
@@ -677,11 +522,13 @@ namespace TcpServer
                         return;
                     }
 
+                    var user = await userService.GetUserByUsernameAsync(username);
                     var success = new
                     {
                         Type = "LoginSuccess",
                         Data = new
                         {
+                            UserId = user.UserId,
                             AccessToken = authResp.AccessToken,
                             AccessTokenExpiry = authResp.AccessTokenExpiry,
                             RefreshToken = authResp.RefreshToken,
@@ -700,7 +547,25 @@ namespace TcpServer
             } // scope disposed
         }
 
+        private async void HandleUpdateLastLogin(int userId)
+        {
+            using (var scope = _rootProvider.CreateScope())
+            {
+                var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
 
+                try
+                {
+                    // This sets user.LastLogin = DateTime.UtcNow in the DB
+                    await userService.UpdateLastLoginAsync(userId);
+                    Console.WriteLine($"[Server] Updated last login for user ID={userId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Server] UpdateLastLogin failed for userId={userId}: {ex.Message}");
+                    // Optionally send a response or error message back if you want
+                }
+            }
+        }
 
 
 
