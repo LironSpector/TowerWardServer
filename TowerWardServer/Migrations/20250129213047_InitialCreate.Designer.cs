@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace TowerWardServer.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250128175105_InitialCreate")]
+    [Migration("20250129213047_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

@@ -102,6 +102,20 @@ namespace TcpServer
             }
         }
 
+        //private void CreateMatch(ClientHandler client1, ClientHandler client2)
+        //{
+        //    client1.SetOpponent(client2);
+        //    client2.SetOpponent(client1);
+
+        //    client1.matchWaveIndex = 0;
+        //    client2.matchWaveIndex = 0;
+
+        //    //client1.SendMessage("{\"Type\":\"MatchFound\"}");
+        //    //client2.SendMessage("{\"Type\":\"MatchFound\"}");
+        //    client1.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
+        //    client2.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
+        //}
+
         private void CreateMatch(ClientHandler client1, ClientHandler client2)
         {
             client1.SetOpponent(client2);
@@ -110,11 +124,23 @@ namespace TcpServer
             client1.matchWaveIndex = 0;
             client2.matchWaveIndex = 0;
 
-            //client1.SendMessage("{\"Type\":\"MatchFound\"}");
-            //client2.SendMessage("{\"Type\":\"MatchFound\"}");
-            client1.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
-            client2.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
+            // We build a JSON with "OpponentId" = client2.UserId for client1
+            // and "OpponentId" = client1.UserId for client2
+
+            int? userId1 = client1.UserId; // might be null if user hasn’t logged in, but usually not
+            int? userId2 = client2.UserId;
+
+            // client1 sees user2 as OpponentId
+            string msg1 = $"{{\"Type\":\"MatchFound\",\"Data\":{{\"OpponentId\":{(userId2 ?? -1)}}}}}";
+            client1.SendEncryptedMessage(msg1);
+
+            // client2 sees user1 as OpponentId
+            string msg2 = $"{{\"Type\":\"MatchFound\",\"Data\":{{\"OpponentId\":{(userId1 ?? -1)}}}}}";
+            client2.SendEncryptedMessage(msg2);
+
+            Console.WriteLine("Match created between user1={0} and user2={1}", userId1, userId2);
         }
+
     }
 
     public class ClientHandler
@@ -137,6 +163,8 @@ namespace TcpServer
 
         // We store the *root* provider
         private readonly IServiceProvider _rootProvider;
+
+        public int? UserId { get; private set; }
 
         public ClientHandler(TcpClient clientSocket, GameTcpServer server, IServiceProvider rootProvider)
         {
@@ -350,6 +378,7 @@ namespace TcpServer
                 case "RegisterUser":
                     HandleRegisterUser(messageObject);
                     break;
+
                 case "LoginUser":
                     HandleLoginUser(messageObject);
                     break;
@@ -362,6 +391,16 @@ namespace TcpServer
                         HandleUpdateLastLogin(userId);
                         break;
                     }
+
+                case "GameOverDetailed":
+                    {
+                        HandleGameOverDetailed(messageObject);
+                        break;
+                    }
+
+                case "AutoLogin":
+                    HandleAutoLogin(messageObject);
+                    break;
 
                 default:
                     Console.WriteLine("Unknown message type received: " + messageType);
@@ -476,6 +515,8 @@ namespace TcpServer
                         return;
                     }
 
+                    this.UserId = userId; // <--- store the user id in this ClientHandler
+
                     var success = new
                     {
                         Type = "RegisterSuccess",
@@ -523,6 +564,8 @@ namespace TcpServer
                     }
 
                     var user = await userService.GetUserByUsernameAsync(username);
+                    this.UserId = user.UserId; // <--- store the user id in this ClientHandler
+
                     var success = new
                     {
                         Type = "LoginSuccess",
@@ -563,6 +606,125 @@ namespace TcpServer
                 {
                     Console.WriteLine($"[Server] UpdateLastLogin failed for userId={userId}: {ex.Message}");
                     // Optionally send a response or error message back if you want
+                }
+            }
+        }
+
+
+        private async void HandleGameOverDetailed(JObject msgObj)
+        {
+            // { "Type":"GameOverDetailed",
+            //   "Data": {
+            //     "User1Id": 5,
+            //     "User2Id": 9 or null,
+            //     "Mode": "SinglePlayer" or "Multiplayer",
+            //     "WonUserId": 5 or null,
+            //     "FinalWave": 20,
+            //     "TimePlayed": 300 // in seconds
+            //   }
+            // }
+
+            JObject dataObj = (JObject)msgObj["Data"];
+            int user1Id = dataObj["User1Id"].ToObject<int>();
+            int? user2Id = dataObj["User2Id"]?.ToObject<int?>();
+            string mode = dataObj["Mode"].ToString();
+            int? wonUserId = dataObj["WonUserId"]?.ToObject<int?>();
+            int finalWave = dataObj["FinalWave"].ToObject<int>();
+            int timePlayed = dataObj["TimePlayed"].ToObject<int>();
+
+            using (var scope = _rootProvider.CreateScope())
+            {
+                var gameSessionService = scope.ServiceProvider.GetRequiredService<IGameSessionService>();
+                var userGameStatsService = scope.ServiceProvider.GetRequiredService<IUserGameStatsService>();
+                var globalStatsService = scope.ServiceProvider.GetRequiredService<IGlobalGameStatsService>();
+
+                try
+                {
+                    DateTime endTime = DateTime.UtcNow;
+                    // We compute StartTime by subtracting timePlayed (seconds) from endTime
+                    DateTime startTime = endTime.AddSeconds(-timePlayed);
+
+                    var sessionDto = new GameSessionDTO
+                    {
+                        User1Id = user1Id,
+                        User2Id = user2Id,
+                        Mode = mode,
+                        StartTime = startTime,
+                        EndTime = endTime,
+                        WonUserId = wonUserId,
+                        FinalWave = finalWave,
+                        TimePlayed = timePlayed
+                    };
+
+                    int newSessionId = await gameSessionService.CreateSessionAsync(sessionDto);
+
+                    bool isSinglePlayer = (mode == "SinglePlayer");
+                    // user1 stats
+                    bool user1Won = (wonUserId == user1Id);
+                    await userGameStatsService.IncrementGamesPlayedAsync(user1Id, user1Won, isSinglePlayer);
+
+                    // user2 if present
+                    if (user2Id.HasValue)
+                    {
+                        bool user2Won = (wonUserId == user2Id);
+                        await userGameStatsService.IncrementGamesPlayedAsync(user2Id.Value, user2Won, false);
+                    }
+
+                    // Update global stats
+                    await globalStatsService.IncrementGamesPlayedAsync(1, isSinglePlayer);
+
+                    Console.WriteLine($"[Server] GameOverDetailed processed. sessionId={newSessionId}, timePlayed={timePlayed}s");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[Server] GameOverDetailed failed: " + ex.Message);
+                }
+            }
+        }
+
+        private async void HandleAutoLogin(JObject msgObj)
+        {
+            Console.WriteLine("MMM");
+            JObject dataObj = (JObject)msgObj["Data"];
+            string token = dataObj["AccessToken"].ToString();
+
+            using (var scope = _rootProvider.CreateScope())
+            {
+                var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+                try
+                {
+                    Console.WriteLine("NNN");
+                    var (isValid, userId) = await authService.ValidateTokenAsync(token);
+                    Console.WriteLine("OOO");
+                    if (!isValid)
+                    {
+                        string failJson = "{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Invalid or expired token\"}}";
+                        SendEncryptedMessage(failJson);
+                        return;
+                    }
+
+                    this.UserId = userId;
+
+                    // Return the userId (and possibly reissue tokens if you want)
+                    // For simplicity, just userId
+                    var successObj = new
+                    {
+                        Type = "AutoLoginSuccess",
+                        Data = new
+                        {
+                            UserId = userId
+                        }
+                    };
+                    string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
+                    SendEncryptedMessage(successJson);
+
+                    Console.WriteLine($"[Server] AutoLogin success => userId={userId}");
+                }
+                catch (Exception ex)
+                {
+                    string fail = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+                    SendEncryptedMessage(fail);
                 }
             }
         }

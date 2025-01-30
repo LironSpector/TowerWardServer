@@ -19,5 +19,9 @@ namespace Services
         /// Could be used for logout everywhere or forced sign-out.
         /// </summary>
         Task RevokeAllAsync(int userId);
+
+
+
+        Task<(bool IsValid, int UserId)> ValidateTokenAsync(string token);
     }
 }
