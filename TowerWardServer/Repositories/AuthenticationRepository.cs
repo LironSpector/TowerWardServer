@@ -22,6 +22,7 @@ namespace Repositories
 
         public async Task<Authentication> GetByRefreshTokenAsync(string refreshToken)
         {
+            Console.WriteLine("Referesh token: " + refreshToken);
             return await _context.Set<Authentication>()
                 .Include(a => a.User)
                 .FirstOrDefaultAsync(a => a.RefreshToken == refreshToken);

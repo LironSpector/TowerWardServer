@@ -74,23 +74,29 @@ namespace Services
         /// </summary>
         public async Task<AuthResponseDTO> RefreshAsync(string refreshToken)
         {
+            Console.WriteLine("Check Num 0");
             // 1) Lookup refresh token record
             var authRecord = await _authRepo.GetByRefreshTokenAsync(refreshToken);
             if (authRecord == null) return null;
 
+            Console.WriteLine("Check Num 1");
             // 2) Check expiry
             if (authRecord.ExpiryTime < DateTime.UtcNow)
             {
+                Console.WriteLine("expired => remove from DB");
                 // expired => remove from DB
                 await _authRepo.DeleteAsync(authRecord);
                 return null;
             }
 
             var userId = authRecord.UserId;
+            Console.WriteLine("Check Num 2, userId: " + userId);
 
             // 3) Generate new tokens
             var (accessToken, accessExpires) = GenerateAccessToken(userId);
+            Console.WriteLine("Check Num 3");
             var (newRefreshToken, newRefreshExpires) = GenerateRefreshToken();
+            Console.WriteLine("Check Num 4");
 
             // 4) Update DB record
             authRecord.RefreshToken = newRefreshToken;
@@ -144,8 +150,10 @@ namespace Services
                     ClockSkew = TimeSpan.Zero
                 };
 
+                Console.WriteLine("Console 1");
                 // Validate the token
                 var principal = tokenHandler.ValidateToken(token, parameters, out var validatedToken);
+                Console.WriteLine("Console 2");
 
                 // (Optional) Check the token is a proper JWT, etc.
                 if (!(validatedToken is JwtSecurityToken jwtToken)
@@ -153,6 +161,7 @@ namespace Services
                 {
                     return (false, 0);
                 }
+                Console.WriteLine("Console 3");
 
                 // - Extract the user id from "sub" claim -
 
@@ -165,7 +174,7 @@ namespace Services
                 {
                     return (false, 0);
                 }
-
+                Console.WriteLine("Console 4");
                 if (!int.TryParse(userIdClaim.Value, out int userId))
                 {
                     return (false, 0);

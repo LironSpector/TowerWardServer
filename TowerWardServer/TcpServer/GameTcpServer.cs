@@ -682,11 +682,71 @@ namespace TcpServer
             }
         }
 
+        //private async void HandleAutoLogin(JObject msgObj)
+        //{
+        //    Console.WriteLine("MMM");
+        //    JObject dataObj = (JObject)msgObj["Data"];
+        //    string token = dataObj["AccessToken"].ToString();
+
+        //    using (var scope = _rootProvider.CreateScope())
+        //    {
+        //        var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+        //        try
+        //        {
+        //            Console.WriteLine("NNN");
+        //            var (isValid, userId) = await authService.ValidateTokenAsync(token);
+        //            Console.WriteLine("OOO");
+        //            if (!isValid)
+        //            {
+        //                string failJson = "{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Invalid or expired token\"}}";
+        //                SendEncryptedMessage(failJson);
+        //                return;
+        //            }
+
+        //            this.UserId = userId;
+
+        //            // Return the userId (and possibly reissue tokens if you want)
+        //            // For simplicity, just userId
+        //            var successObj = new
+        //            {
+        //                Type = "AutoLoginSuccess",
+        //                Data = new
+        //                {
+        //                    UserId = userId
+        //                }
+        //            };
+        //            string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
+        //            SendEncryptedMessage(successJson);
+
+        //            Console.WriteLine($"[Server] AutoLogin success => userId={userId}");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            string fail = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
+        //            SendEncryptedMessage(fail);
+        //        }
+        //    }
+        //}
+
+
         private async void HandleAutoLogin(JObject msgObj)
         {
-            Console.WriteLine("MMM");
+            // e.g. {
+            //   "Type":"AutoLogin",
+            //   "Data":{
+            //     "AccessToken":"...maybe expired...",
+            //     "RefreshToken":"...maybe valid..."
+            //   }
+            // }
             JObject dataObj = (JObject)msgObj["Data"];
-            string token = dataObj["AccessToken"].ToString();
+            string accessToken = dataObj["AccessToken"]?.ToString();
+            string refreshToken = dataObj["RefreshToken"]?.ToString();
+            Console.WriteLine("dataObj is null: " + dataObj);
+            Console.WriteLine("accessToken: " + accessToken);
+            Console.WriteLine("refreshToken: " + refreshToken);
+            Console.WriteLine("refreshToken:" + refreshToken + "full stop1.");
+            Console.WriteLine("refreshToken:" + (refreshToken == ""));
 
             using (var scope = _rootProvider.CreateScope())
             {
@@ -694,41 +754,86 @@ namespace TcpServer
 
                 try
                 {
-                    Console.WriteLine("NNN");
-                    var (isValid, userId) = await authService.ValidateTokenAsync(token);
-                    Console.WriteLine("OOO");
-                    if (!isValid)
+                    // 1) First try ValidateTokenAsync on the existing access token
+                    Console.WriteLine("At first in HandleAutoLogin");
+                    var (isValid, userId) = await authService.ValidateTokenAsync(accessToken);
+                    Console.WriteLine("isValid: " + isValid);
+                    if (isValid)
                     {
-                        string failJson = "{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Invalid or expired token\"}}";
-                        SendEncryptedMessage(failJson);
+                        // The old token is still good (not expired).
+                        // Optionally reissue a new token if you want to refresh its expiry – or just return the same.
+                        // For simplicity, let's keep the same access token:
+                        this.UserId = userId;
+                        SendAutoLoginSuccess(userId, accessToken, null, refreshToken, null);
+                        Console.WriteLine("[Server] AutoLogin success => userId=" + userId + " (existing token still valid)");
                         return;
                     }
-
-                    this.UserId = userId;
-
-                    // Return the userId (and possibly reissue tokens if you want)
-                    // For simplicity, just userId
-                    var successObj = new
+                    else
                     {
-                        Type = "AutoLoginSuccess",
-                        Data = new
+                        Console.WriteLine("refreshToken:" + refreshToken + "full stop2.");
+                        //Console.WriteLine("refreshToken type: " + refreshToken.GetType());
+                        Console.WriteLine("AYY");
+                        // 2) The access token is invalid or expired => Try refresh
+                        var authResp = await authService.RefreshAsync(refreshToken);
+                        if (authResp == null)
                         {
-                            UserId = userId
+                            // refresh token also invalid => fail
+                            SendAutoLoginFail("Expired or invalid access/refresh token. Must do full login.");
+                            return;
                         }
-                    };
-                    string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
-                    SendEncryptedMessage(successJson);
 
-                    Console.WriteLine($"[Server] AutoLogin success => userId={userId}");
+                        // If refresh succeeded => we got new access token & refresh token
+                        this.UserId = authResp.UserId; // If you want the connection recognized
+                        SendAutoLoginSuccess(
+                            authResp.UserId,
+                            authResp.AccessToken,
+                            authResp.AccessTokenExpiry,
+                            authResp.RefreshToken,
+                            authResp.RefreshTokenExpiry);
+
+                        Console.WriteLine("[Server] AutoLogin success => userId=" + authResp.UserId + " (refreshed token)");
+                        return;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    string fail = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
-                    SendEncryptedMessage(fail);
+                    Console.WriteLine("catch block activated");
+                    SendAutoLoginFail(ex.Message);
                 }
             }
         }
 
+        private void SendAutoLoginSuccess(
+            int userId,
+            string accessToken,
+            DateTime? accessTokenExpiry,
+            string refreshToken,
+            DateTime? refreshTokenExpiry)
+        {
+            // Return new or same tokens so the client can store them
+            // If we didn't reissue the same, you can pass null for unused fields
+
+            var successObj = new
+            {
+                Type = "AutoLoginSuccess",
+                Data = new
+                {
+                    UserId = userId,
+                    AccessToken = accessToken,
+                    AccessTokenExpiry = accessTokenExpiry?.ToString("o"), // or e.g. .ToString() if you prefer
+                    RefreshToken = refreshToken,
+                    RefreshTokenExpiry = refreshTokenExpiry?.ToString("o")
+                }
+            };
+            string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
+            SendEncryptedMessage(successJson);
+        }
+
+        private void SendAutoLoginFail(string reason)
+        {
+            string failJson = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{reason}\"}}}}";
+            SendEncryptedMessage(failJson);
+        }
 
 
         public void SetOpponent(ClientHandler opponent)
