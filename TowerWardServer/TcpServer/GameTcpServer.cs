@@ -298,9 +298,43 @@ namespace TcpServer
         /// </summary>
         private void HandleMessage(string data)
         {
+            //Console.WriteLine("[Server] Decrypted data: " + data);
+            //JObject messageObject = JObject.Parse(data);
+            //string messageType = messageObject["Type"].ToString();
+
+
             Console.WriteLine("[Server] Decrypted data: " + data);
             JObject messageObject = JObject.Parse(data);
             string messageType = messageObject["Type"].ToString();
+
+
+            if (messageType != "RegisterUser" && messageType != "LoginUser" && messageType != "AutoLogin" && messageType != "GameSnapshot") //If it's one of these messges, the process is handled differently by the speicfic functions
+            {
+                // 1) Extract the token data first
+                JObject tokenData = (JObject)messageObject["TokenData"];
+                if (tokenData == null)
+                {
+                    // No tokens => fail or treat as unauth
+                    SendEncryptedMessage("{\"Type\":\"Error\",\"Data\":{\"Reason\":\"No TokenData in message.\"}}");
+                    return;
+                }
+
+                string accessToken = tokenData["AccessToken"]?.ToString();
+                string refreshToken = tokenData["RefreshToken"]?.ToString();
+
+                // 2) Validate or refresh
+                int? userId = CheckAndRefreshTokens(accessToken, refreshToken);
+                if (userId == null)
+                {
+                    // invalid => bail
+                    return;
+                }
+                // If valid => user recognized
+                this.UserId = userId;
+                Console.WriteLine("CheckAndRefreshTokens - OK");
+            }
+
+
 
             switch (messageType)
             {
@@ -338,7 +372,14 @@ namespace TcpServer
 
                 case "WaveDone":
                     {
-                        int waveFinishedIndex = (int)messageObject["WaveIndex"];
+                        //before changes in the message structure
+                        //int waveFinishedIndex = (int)messageObject["WaveIndex"];
+
+                        //after changes in the message structure
+                        JObject dataObj = (JObject)messageObject["Data"];
+                        int waveFinishedIndex = dataObj["WaveIndex"].ToObject<int>();
+
+
                         Console.WriteLine($"Player finished wave {waveFinishedIndex}, matchWaveIndex= {matchWaveIndex}");
 
                         if (waveFinishedIndex == matchWaveIndex)
@@ -386,9 +427,9 @@ namespace TcpServer
                 case "UpdateLastLogin":
                     {
                         JObject dataObj = (JObject)messageObject["Data"];
-                        int userId = dataObj["UserId"].ToObject<int>();
+                        int currentUserId = dataObj["UserId"].ToObject<int>();
 
-                        HandleUpdateLastLogin(userId);
+                        HandleUpdateLastLogin(currentUserId);
                         break;
                     }
 
@@ -406,6 +447,70 @@ namespace TcpServer
                     Console.WriteLine("Unknown message type received: " + messageType);
                     break;
             }
+        }
+
+
+        private int? CheckAndRefreshTokens(string accessToken, string refreshToken)
+        {
+            using (var scope = _rootProvider.CreateScope())
+            {
+                var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+                try
+                {
+                    // 1) Attempt Validate
+                    var (isValid, userId) = authService.ValidateTokenAsync(accessToken).Result;
+                    if (isValid)
+                    {
+                        // Already good
+                        Console.WriteLine("Already good");
+                        return userId;
+                    }
+                    else
+                    {
+                        // Expired or invalid => try refresh
+                        var resp = authService.RefreshAsync(refreshToken).Result;
+                        if (resp == null)
+                        {
+                            Console.WriteLine("Fail for Expired or invalid => try refresh");
+                            // Also invalid => reject
+                            SendEncryptedMessage("{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Access + Refresh tokens invalid. Re-login required.\"}}");
+                            return null;
+                        }
+                        // If refresh success => return new tokens to client so they store them
+                        // We also store userId in the client handler if you want
+                        // e.g. userId = resp.UserId;
+                        Console.WriteLine("Success for Expired or invalid => try refresh");
+                        SendNewTokensToClient(resp);
+                        return resp.UserId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Some error => fail
+                    SendEncryptedMessage($"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}");
+                    return null;
+                }
+            }
+        }
+
+        // Helper to re-issue tokens to the client, so it updates them
+        private void SendNewTokensToClient(AuthResponseDTO resp)
+        {
+            var successObj = new
+            {
+                Type = "AutoLoginSuccess",
+                Data = new
+                {
+                    UserId = resp.UserId,
+                    AccessToken = resp.AccessToken,
+                    AccessTokenExpiry = resp.AccessTokenExpiry.ToString("o"),
+                    RefreshToken = resp.RefreshToken,
+                    RefreshTokenExpiry = resp.RefreshTokenExpiry.ToString("o")
+                }
+            };
+            string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
+            SendEncryptedMessage(successJson);
         }
 
 
