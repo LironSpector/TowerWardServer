@@ -102,20 +102,6 @@ namespace TcpServer
             }
         }
 
-        //private void CreateMatch(ClientHandler client1, ClientHandler client2)
-        //{
-        //    client1.SetOpponent(client2);
-        //    client2.SetOpponent(client1);
-
-        //    client1.matchWaveIndex = 0;
-        //    client2.matchWaveIndex = 0;
-
-        //    //client1.SendMessage("{\"Type\":\"MatchFound\"}");
-        //    //client2.SendMessage("{\"Type\":\"MatchFound\"}");
-        //    client1.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
-        //    client2.SendEncryptedMessage("{\"Type\":\"MatchFound\"}");
-        //}
-
         private void CreateMatch(ClientHandler client1, ClientHandler client2)
         {
             client1.SetOpponent(client2);
@@ -372,9 +358,6 @@ namespace TcpServer
 
                 case "WaveDone":
                     {
-                        //before changes in the message structure
-                        //int waveFinishedIndex = (int)messageObject["WaveIndex"];
-
                         //after changes in the message structure
                         JObject dataObj = (JObject)messageObject["Data"];
                         int waveFinishedIndex = dataObj["WaveIndex"].ToObject<int>();
@@ -787,53 +770,6 @@ namespace TcpServer
             }
         }
 
-        //private async void HandleAutoLogin(JObject msgObj)
-        //{
-        //    Console.WriteLine("MMM");
-        //    JObject dataObj = (JObject)msgObj["Data"];
-        //    string token = dataObj["AccessToken"].ToString();
-
-        //    using (var scope = _rootProvider.CreateScope())
-        //    {
-        //        var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
-
-        //        try
-        //        {
-        //            Console.WriteLine("NNN");
-        //            var (isValid, userId) = await authService.ValidateTokenAsync(token);
-        //            Console.WriteLine("OOO");
-        //            if (!isValid)
-        //            {
-        //                string failJson = "{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Invalid or expired token\"}}";
-        //                SendEncryptedMessage(failJson);
-        //                return;
-        //            }
-
-        //            this.UserId = userId;
-
-        //            // Return the userId (and possibly reissue tokens if you want)
-        //            // For simplicity, just userId
-        //            var successObj = new
-        //            {
-        //                Type = "AutoLoginSuccess",
-        //                Data = new
-        //                {
-        //                    UserId = userId
-        //                }
-        //            };
-        //            string successJson = Newtonsoft.Json.JsonConvert.SerializeObject(successObj);
-        //            SendEncryptedMessage(successJson);
-
-        //            Console.WriteLine($"[Server] AutoLogin success => userId={userId}");
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            string fail = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{ex.Message}\"}}}}";
-        //            SendEncryptedMessage(fail);
-        //        }
-        //    }
-        //}
-
 
         private async void HandleAutoLogin(JObject msgObj)
         {
@@ -847,11 +783,10 @@ namespace TcpServer
             JObject dataObj = (JObject)msgObj["Data"];
             string accessToken = dataObj["AccessToken"]?.ToString();
             string refreshToken = dataObj["RefreshToken"]?.ToString();
-            Console.WriteLine("dataObj is null: " + dataObj);
+            Console.WriteLine("dataObj: " + dataObj);
             Console.WriteLine("accessToken: " + accessToken);
             Console.WriteLine("refreshToken: " + refreshToken);
-            Console.WriteLine("refreshToken:" + refreshToken + "full stop1.");
-            Console.WriteLine("refreshToken:" + (refreshToken == ""));
+            Console.WriteLine("refreshToken:" + refreshToken);
 
             using (var scope = _rootProvider.CreateScope())
             {
@@ -875,9 +810,7 @@ namespace TcpServer
                     }
                     else
                     {
-                        Console.WriteLine("refreshToken:" + refreshToken + "full stop2.");
-                        //Console.WriteLine("refreshToken type: " + refreshToken.GetType());
-                        Console.WriteLine("AYY");
+                        Console.WriteLine("refreshToken:" + refreshToken);
                         // 2) The access token is invalid or expired => Try refresh
                         var authResp = await authService.RefreshAsync(refreshToken);
                         if (authResp == null)
@@ -925,7 +858,7 @@ namespace TcpServer
                 {
                     UserId = userId,
                     AccessToken = accessToken,
-                    AccessTokenExpiry = accessTokenExpiry?.ToString("o"), // or e.g. .ToString() if you prefer
+                    AccessTokenExpiry = accessTokenExpiry?.ToString("o"),
                     RefreshToken = refreshToken,
                     RefreshTokenExpiry = refreshTokenExpiry?.ToString("o")
                 }
@@ -991,371 +924,3 @@ namespace TcpServer
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// -------------------- Previous TcpServer - before adding AES & RSA encryption --------------------
-//using System;
-//using System.Net;
-//using System.Net.Sockets;
-//using System.Text;
-//using System.Threading;
-//using System.Collections.Generic;
-//using Newtonsoft.Json.Linq;
-//using Microsoft.AspNetCore.Hosting.Server;
-//using System.ComponentModel;
-//using System.Security.Cryptography;
-
-//namespace TcpServer
-//{
-//    public class GameTcpServer
-//    {
-//        private TcpListener _tcpListener;
-//        private List<ClientHandler> _clients = new List<ClientHandler>();
-//        private Queue<ClientHandler> _waitingClients = new Queue<ClientHandler>();
-//        private readonly int _port;
-
-//        public GameTcpServer(int port)
-//        {
-//            _port = port;
-//        }
-
-//        public void Start()
-//        {
-//            _tcpListener = new TcpListener(IPAddress.Any, _port);
-//            _tcpListener.Start();
-//            Console.WriteLine($"TCP Server started on port {_port}");
-
-//            while (true)
-//            {
-//                TcpClient clientSocket = _tcpListener.AcceptTcpClient();
-//                Console.WriteLine("Client connected!");
-
-//                ClientHandler clientHandler = new ClientHandler(clientSocket, this);
-//                lock (_clients)
-//                {
-//                    _clients.Add(clientHandler);
-//                }
-
-//                Thread clientThread = new Thread(clientHandler.Process);
-//                clientThread.Start();
-//            }
-//        }
-
-//        public void RemoveClient(ClientHandler client)
-//        {
-//            lock (_waitingClients)
-//            {
-//                if (_waitingClients.Contains(client))
-//                {
-//                    // If the client is waiting in the queue, remove it
-//                    // (Though Dequeue() alone won't remove that client 
-//                    //  unless it's at the front, so you might do a different approach.)
-//                    // For simplicity, we'll just remove from _clients
-//                    // but be aware of the queue order if needed.
-
-//                    _waitingClients.Dequeue(); //A situation where a client will be removed and is also waiting is if he is the only one waiting, so dequeuing will dequeue that client from the queue.
-//                }
-//            }
-
-//            lock (_clients)
-//            {
-//                _clients.Remove(client);
-//            }
-//        }
-
-//        public void AddToMatchmaking(ClientHandler client)
-//        {
-//            lock (_waitingClients)
-//            {
-//                Console.WriteLine("waitingClients.Count: " + _waitingClients.Count);
-//                if (_waitingClients.Count > 0)
-//                {
-//                    ClientHandler opponent = _waitingClients.Dequeue();
-//                    Console.WriteLine("Client: " + client + ", opponent: " + opponent);
-//                    CreateMatch(client, opponent);
-//                }
-//                else
-//                {
-//                    _waitingClients.Enqueue(client);
-//                    // Notify client they are waiting for an opponent
-//                    client.SendMessage("{\"Type\":\"MatchWaiting\"}");
-//                }
-//                Console.WriteLine("waitingClients.Count - two: " + _waitingClients.Count);
-//            }
-//        }
-
-//        private void CreateMatch(ClientHandler client1, ClientHandler client2)
-//        {
-//            client1.SetOpponent(client2);
-//            client2.SetOpponent(client1);
-
-//            client1.matchWaveIndex = 0;
-//            client2.matchWaveIndex = 0;
-
-//            client1.SendMessage("{\"Type\":\"MatchFound\"}");
-//            client2.SendMessage("{\"Type\":\"MatchFound\"}");
-//        }
-//    }
-
-//    public class ClientHandler
-//    {
-//        private TcpClient _clientSocket;
-//        private GameTcpServer _server;
-//        private NetworkStream _stream;
-//        private byte[] _buffer = new byte[4096];
-
-//        private ClientHandler _opponent;
-//        public int matchWaveIndex = 0;
-
-//        public ClientHandler(TcpClient clientSocket, GameTcpServer server)
-//        {
-//            _clientSocket = clientSocket;
-//            _server = server;
-//            _stream = clientSocket.GetStream();
-//        }
-
-//        public void Process()
-//        {
-//            try
-//            {
-//                while (true)
-//                {
-//                    byte[] lengthBuffer = new byte[4];
-//                    int bytesRead = _stream.Read(lengthBuffer, 0, 4);
-//                    if (bytesRead == 0) break;
-//                    int messageLength = BitConverter.ToInt32(lengthBuffer, 0);
-
-//                    byte[] messageBuffer = new byte[messageLength];
-//                    int totalBytesRead = 0;
-//                    while (totalBytesRead < messageLength)
-//                    {
-//                        int read = _stream.Read(messageBuffer, totalBytesRead, messageLength - totalBytesRead);
-//                        if (read == 0) break;
-//                        totalBytesRead += read;
-//                    }
-
-//                    if (totalBytesRead < messageLength)
-//                    {
-//                        // Connection closed in the middle of a message
-//                        break;
-//                    }
-
-//                    string data = Encoding.UTF8.GetString(messageBuffer, 0, totalBytesRead);
-//                    HandleMessage(data);
-//                }
-//            }
-//            catch (Exception ex)
-//            {
-//                Console.WriteLine("Client disconnected: " + ex.Message);
-//            }
-//            finally
-//            {
-//                Console.WriteLine("Client disconnected (and is removed): " + this);
-
-//                if (_opponent != null)
-//                {
-//                    _opponent.SendMessage("{\"Type\":\"OpponentDisconnected\"}");
-//                    _opponent.SetOpponent(null);
-//                }
-
-//                _clientSocket.Close();
-//                _server.RemoveClient(this);
-//            }
-//        }
-
-//        private void HandleMessage(string data)
-//        {
-//            Console.WriteLine("Data: " + data);
-//            JObject messageObject = JObject.Parse(data);
-//            string messageType = messageObject["Type"].ToString();
-
-//            switch (messageType)
-//            {
-//                case "MatchmakingRequest":
-//                    _server.AddToMatchmaking(this);
-//                    Console.WriteLine("AddedToMatchmaking a client");
-//                    break;
-
-//                case "SendBalloon":
-//                    if (_opponent != null)
-//                    {
-//                        // Relay the message to the opponent
-//                        _opponent.SendMessage(data);
-//                    }
-//                    break;
-
-//                case "GameSnapshot":
-//                    if (_opponent != null)
-//                    {
-//                        // Relay the snapshot to the opponent
-//                        _opponent.SendMessage(data);
-//                    }
-//                    break;
-
-//                case "ShowSnapshots":
-//                    if (_opponent != null)
-//                    {
-//                        // Relay the message to the opponent
-//                        _opponent.SendMessage(data);
-//                    }
-//                    break;
-
-//                case "HideSnapshots":
-//                    if (_opponent != null)
-//                    {
-//                        // Relay the message to the opponent
-//                        _opponent.SendMessage(data);
-//                    }
-//                    break;
-
-//                case "WaveDone":
-//                    {
-//                        int waveFinishedIndex = (int)messageObject["WaveIndex"];
-//                        Console.WriteLine($"Player finished wave {waveFinishedIndex}, matchWaveIndex= {matchWaveIndex}");
-
-//                        // If waveFinishedIndex matches the matchWaveIndex we currently have
-//                        if (waveFinishedIndex == matchWaveIndex)
-//                        {
-//                            matchWaveIndex++; // Next wave
-//                            if (_opponent != null)
-//                            {
-//                                _opponent.matchWaveIndex = matchWaveIndex;
-//                                this.matchWaveIndex = matchWaveIndex;
-
-//                                // Tell both clients to spawn wave matchWaveIndex
-//                                string startMsg = $"{{\"Type\":\"StartNextWave\",\"WaveIndex\":{matchWaveIndex}}}";
-//                                this.SendMessage(startMsg);
-//                                _opponent.SendMessage(startMsg);
-//                            }
-//                        }
-//                        break;
-//                    }
-
-//                case "UseMultiplayerAbility":
-//                    if (_opponent != null)
-//                    {
-//                        // Insert "FromOpponent":true in the JSON to let the opponent know
-//                        JObject jData = (JObject)messageObject["Data"];
-//                        jData["FromOpponent"] = true;
-
-//                        // Then forward
-//                        _opponent.SendMessage(messageObject.ToString());
-//                    }
-//                    // If there's also a local effect, you might do it here or the client does it after sending
-//                    break;
-
-//                case "GameOver":
-//                    if (_opponent != null)
-//                    {
-//                        // Relay the game over message to the opponent
-//                        _opponent.SendMessage(data);
-
-//                        //The opponent of both players is reset to null since the game is over and they don't have an opponent right now
-//                        _opponent.SetOpponent(opponent: null);
-//                        this.SetOpponent(opponent: null);
-//                    }
-//                    break;
-
-//                // Handle other message types
-//                default:
-//                    Console.WriteLine("Unknown message type received: " + messageType);
-//                    break;
-//            }
-//        }
-
-//        public void SendMessage(string message)
-//        {
-//            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
-//            byte[] lengthBytes = BitConverter.GetBytes(messageBytes.Length);
-
-//            _stream.Write(lengthBytes, 0, lengthBytes.Length);
-//            _stream.Write(messageBytes, 0, messageBytes.Length);
-//        }
-
-//        public void SetOpponent(ClientHandler opponent)
-//        {
-//            _opponent = opponent;
-//        }
-
-//        public override string ToString()
-//        {
-//            return $"ClientHandler({_clientSocket.Client.RemoteEndPoint})";
-//        }
-//    }
-
-
-//    public static class EncryptionHelper
-//    {
-//        private static readonly byte[] key;
-//        private static readonly byte[] iv;
-
-//        // Static constructor to initialize the key and IV
-//        static EncryptionHelper()
-//        {
-//            key = GenerateRandomBytes(32); // 256-bit key
-//            iv = GenerateRandomBytes(16);  // 128-bit IV
-
-//            Console.WriteLine($"Generated Key: {Convert.ToBase64String(key)}");
-//            Console.WriteLine($"Generated IV: {Convert.ToBase64String(iv)}");
-//        }
-
-//        // Method to generate random bytes
-//        private static byte[] GenerateRandomBytes(int length)
-//        {
-//            byte[] randomBytes = new byte[length];
-//            using (var rng = RandomNumberGenerator.Create())
-//            {
-//                rng.GetBytes(randomBytes);
-//            }
-//            return randomBytes;
-//        }
-
-//        public static string Encrypt(string plainText)
-//        {
-//            using (Aes aes = Aes.Create())
-//            {
-//                aes.Key = key;
-//                aes.IV = iv;
-
-//                using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
-//                {
-//                    byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
-//                    byte[] encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
-
-//                    return Convert.ToBase64String(encryptedBytes);
-//                }
-//            }
-//        }
-
-//        public static string Decrypt(string cipherText)
-//        {
-//            using (Aes aes = Aes.Create())
-//            {
-//                aes.Key = key;
-//                aes.IV = iv;
-
-//                using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
-//                {
-//                    byte[] cipherBytes = Convert.FromBase64String(cipherText);
-//                    byte[] decryptedBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
-
-//                    return Encoding.UTF8.GetString(decryptedBytes);
-//                }
-//            }
-//        }
-//    }
-//}
-
