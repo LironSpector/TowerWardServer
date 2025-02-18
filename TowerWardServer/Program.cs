@@ -163,6 +163,7 @@ using Services;
 using Settings;
 using TcpServer;
 using Tests;
+using AdminTools;
 
 
 namespace GameSolution
@@ -270,6 +271,8 @@ namespace GameSolution
             // Optionally run the better DB test
             //await FullDatabaseTestSuite.RunAllTestsAsync(app);
 
+            // Run "PrintAdminReport"
+            //await AdminReport.PrintAdminReport(app);
 
             // 5) Create TCP server instance
             var tcpPort = 5555;
