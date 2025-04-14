@@ -57,13 +57,10 @@ namespace Services
             // 5) Return tokens
             return new AuthResponseDTO
             {
-                // Might also add "UserId = user.UserId" so the caller knows who this token belongs to
                 AccessToken = accessToken,
                 AccessTokenExpiry = accessExpires,
                 RefreshToken = refreshToken,
                 RefreshTokenExpiry = refreshExpires,
-
-                // Optional: If you want the client to see userId:
                 UserId = user.UserId
             };
         }
@@ -137,7 +134,6 @@ namespace Services
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes(_jwtSettings.SecretKey);
-
             try
             {
                 // Define how we validate the token
@@ -179,8 +175,6 @@ namespace Services
                 {
                     return (false, 0);
                 }
-
-                // (Optional) I could do further checks, e.g. see if user is banned
 
                 return (true, userId);
             }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Services;
 using DTOs;
 
@@ -17,15 +17,15 @@ namespace AdminTools
         /// Fetches the GlobalGameStats record (by default ID=1) and prints a
         /// nicely formatted summary of the global stats in the console.
         /// 
-        /// Call this method from Program.cs after building the app:
-        ///     await AdminReport.PrintAdminReport(app);
+        /// Call this method from Program.cs after building the host:
+        ///     await AdminReport.PrintAdminReport(host);
         /// </summary>
-        /// <param name="app">The WebApplication (for DI scope creation).</param>
+        /// <param name="host">The IHost instance (for DI scope creation).</param>
         /// <param name="statsId">Which global stats record ID to load (defaults to 1).</param>
-        public static async Task PrintAdminReport(WebApplication app, int statsId = 1)
+        public static async Task PrintAdminReport(IHost host, int statsId = 1)
         {
-            // Create a DI scope so we can retrieve necessary services
-            using var scope = app.Services.CreateScope();
+            // Create a DI scope using host.Services
+            using var scope = host.Services.CreateScope();
             var globalStatsService = scope.ServiceProvider.GetRequiredService<IGlobalGameStatsService>();
 
             // Attempt to fetch the global stats record by the given ID
@@ -36,12 +36,12 @@ namespace AdminTools
                 return;
             }
 
-            // Print a nice ASCII table containing the important global stats
+            // Print a nicely formatted summary report in the console
             Console.WriteLine();
             Console.WriteLine("====================================================");
             Console.WriteLine("|              ADMIN SUMMARY REPORT               |");
             Console.WriteLine("====================================================");
-            Console.WriteLine($"|  Global Stats ID           : {globalStats.Id,-24} |"); // The -24 ensures the value is left-aligned within a 24-character-wide field, padding with spaces on the right if necessary.
+            Console.WriteLine($"|  Global Stats ID           : {globalStats.Id,-24} |");
             Console.WriteLine($"|  Total Registered Users    : {globalStats.TotalUsers,-24} |");
             Console.WriteLine($"|  Total Games Played        : {globalStats.TotalGamesPlayed,-24} |");
             Console.WriteLine($"|  Single-player Games       : {globalStats.TotalSingleplayerGames,-24} |");

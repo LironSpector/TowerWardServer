@@ -4,10 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Hosting;
 using Services;
 using DTOs;
-using System.Security.Cryptography;
 
 namespace Tests
 {
@@ -15,22 +14,18 @@ namespace Tests
     /// A comprehensive test suite covering all major database-related functionality
     /// of the server. It manually exercises the Services layer to confirm that
     /// create, read, update, and delete operations work as expected.
-    /// 
-    /// Note: In a real-world scenario, you might use a unit test or integration test
-    /// framework such as xUnit, NUnit, or MSTest. For illustrative purposes, we do
-    /// everything in a single class with manual checks and thrown exceptions.
     /// </summary>
     public static class FullDatabaseTestSuite
     {
         /// <summary>
-        /// Entry point to run all tests. 
+        /// Entry point to run all tests.
         /// Call this method from Program.cs (or anywhere) with:
-        ///   await FullDatabaseTestSuite.RunAllTestsAsync(app);
+        ///     await FullDatabaseTestSuite.RunAllTestsAsync(host);
         /// </summary>
-        /// <param name="app">Your WebApplication instance</param>
-        public static async Task RunAllTestsAsync(WebApplication app)
+        /// <param name="host">The IHost instance to use for creating DI scopes.</param>
+        public static async Task RunAllTestsAsync(IHost host)
         {
-            using var scope = app.Services.CreateScope();
+            using var scope = host.Services.CreateScope();
 
             // Retrieve services from DI
             var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
