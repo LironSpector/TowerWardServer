@@ -2,23 +2,65 @@ using System;
 
 namespace Models
 {
+    /// <summary>
+    /// Represents a single play session, either single-player or multiplayer.
+    /// Stores participants, outcome, and timing information.
+    /// </summary>
     public class GameSession
     {
-        public int SessionId { get; set; } // PK
-        public int? User1Id { get; set; }  // FK -> users
-        public int? User2Id { get; set; }  // FK -> users
-        public string Mode { get; set; }   // "SinglePlayer", "Multiplayer"
-        public DateTime StartTime { get; set; }
-        public DateTime? EndTime { get; set; }
-        public int? WonUserId { get; set; }
-        public int? FinalWave { get; set; }
-        public int? TimePlayed { get; set; } // e.g. in seconds
+        /// <summary>
+        /// Primary key of the session.
+        /// </summary>
+        public int SessionId { get; set; }
 
-        // Navigation properties
+        /// <summary>
+        /// Foreign key to the first user (participant 1), if any.
+        /// </summary>
+        public int? User1Id { get; set; }
+
+        /// <summary>
+        /// Foreign key to the second user (participant 2), if any.
+        /// </summary>
+        public int? User2Id { get; set; }
+
+        /// <summary>
+        /// Mode of play: "SinglePlayer" or "Multiplayer".
+        /// </summary>
+        public string Mode { get; set; }
+
+        /// <summary>
+        /// Timestamp when the session started.
+        /// </summary>
+        public DateTime StartTime { get; set; }
+
+        /// <summary>
+        /// Timestamp when the session ended, if ended.
+        /// </summary>
+        public DateTime? EndTime { get; set; }
+
+        /// <summary>
+        /// UserId of the winner, if any.
+        /// </summary>
+        public int? WonUserId { get; set; }
+
+        /// <summary>
+        /// The final wave reached in the session, if tracked.
+        /// </summary>
+        public int? FinalWave { get; set; }
+
+        /// <summary>
+        /// Total time played in this session, in seconds.
+        /// </summary>
+        public int? TimePlayed { get; set; }
+
+        /// <summary>
+        /// Navigation property to participant 1.
+        /// </summary>
         public User User1 { get; set; }
+
+        /// <summary>
+        /// Navigation property to participant 2.
+        /// </summary>
         public User User2 { get; set; }
-        // If the user who won is either user1 or user2, you can reference them similarly:
-        // Optionally, store a reference to the winning user if you prefer:
-        // public User WonUser { get; set; }
     }
 }

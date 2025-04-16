@@ -10,13 +10,18 @@ namespace TcpServer
 {
     /// <summary>
     /// Receives decrypted JSON from ClientHandler and runs the big switch logic.
-    /// Also includes the methods for register/login, token checking, etc.
+    /// Also includes the methods for register/login, token checking, and other DB/auth operations.
     /// </summary>
     public class ServerMessageHandler
     {
         private readonly ClientHandler _client;
         private readonly IServiceProvider _rootProvider;
 
+        /// <summary>
+        /// Initializes a new instance of the ServerMessageHandler class.
+        /// </summary>
+        /// <param name="client">The ClientHandler representing the connected client.</param>
+        /// <param name="rootProvider">The root IServiceProvider used for creating dependency injection scopes.</param>
         public ServerMessageHandler(ClientHandler client, IServiceProvider rootProvider)
         {
             _client = client;
@@ -24,9 +29,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// Main entry for a post-handshake, decrypted JSON.
-        /// Splits into different "case" methods.
+        /// Main entry for processing a post-handshake, decrypted JSON message.
+        /// Splits the processing logic based on the "Type" field in the JSON message.
         /// </summary>
+        /// <param name="data">The decrypted JSON message as a string.</param>
         public void HandleMessage(string data)
         {
             Console.WriteLine("[ServerMessageHandler] Decrypted data => " + data);
@@ -34,9 +40,9 @@ namespace TcpServer
             JObject msgObj = JObject.Parse(data);
             string messageType = msgObj["Type"]?.ToString();
 
-            // If not a login/registration or snapshot, parse tokenData
+            // If not a login/registration or snapshot message, then extract token data and validate it.
             if (messageType != "RegisterUser" && messageType != "LoginUser"
-                && messageType != "AutoLogin" && messageType != "GameSnapshot")  //If it's one of these messges, the process is handled differently by the speicfic functions
+                && messageType != "AutoLogin" && messageType != "GameSnapshot")
             {
                 // 1) Extract the token data first and check it
                 JObject tokenData = (JObject)msgObj["TokenData"];
@@ -48,11 +54,12 @@ namespace TcpServer
                 string accessToken = tokenData["AccessToken"]?.ToString();
                 string refreshToken = tokenData["RefreshToken"]?.ToString();
 
-                // 2) Validate or refresh
+                // 2) Validate or refresh tokens
                 int? userId = CheckAndRefreshTokens(accessToken, refreshToken);
-                if (userId == null) return; // invalid => stop
+                if (userId == null)
+                    return; // invalid, so stop processing
 
-                // If valid => user recognized
+                // If valid, store the user id in the client handler.
                 _client.SetUserId(userId.Value);
 
                 Console.WriteLine("CheckAndRefreshTokens - OK");
@@ -65,17 +72,8 @@ namespace TcpServer
                     break;
 
                 case "SendBalloon":
-                    ForwardToOpponent(data);
-                    break;
-
                 case "GameSnapshot":
-                    ForwardToOpponent(data);
-                    break;
-
                 case "ShowSnapshots":
-                    ForwardToOpponent(data);
-                    break;
-
                 case "HideSnapshots":
                     ForwardToOpponent(data);
                     break;
@@ -119,8 +117,9 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// For messages that simply get forwarded to the opponent (like SendBalloon, ShowSnapshots, etc.).
+        /// For messages that simply get forwarded to the opponent (e.g., SendBalloon, GameSnapshot, ShowSnapshots, HideSnapshots).
         /// </summary>
+        /// <param name="data">The JSON message to forward.</param>
         private void ForwardToOpponent(string data)
         {
             var opp = _client.GetOpponent();
@@ -131,9 +130,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// For "UseMultiplayerAbility" we add "FromOpponent":true for the other side,
-        /// then forward the entire message.
+        /// For "UseMultiplayerAbility" messages, sets the "FromOpponent" flag to true in the Data object,
+        /// then forwards the entire message to the opponent.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the message.</param>
         private void ForwardAbility(JObject msgObj)
         {
             var opp = _client.GetOpponent();
@@ -146,8 +146,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// For "WaveDone", check if it matches local wave index => increment, start next wave for both.
+        /// Handles the "WaveDone" message by checking if the wave index from the message matches the local match wave index.
+        /// If so, increments the match wave index for both clients and sends a "StartNextWave" message.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the message.</param>
         private void HandleWaveDone(JObject msgObj)
         {
             JObject dataObj = (JObject)msgObj["Data"];
@@ -171,8 +173,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// For "GameOver": forward to opponent, then break the link.
+        /// Handles the "GameOver" message.
+        /// Forwards the message to the opponent and then clears the opponent relationship.
         /// </summary>
+        /// <param name="data">The JSON message representing the GameOver event.</param>
         private void HandleGameOver(string data)
         {
             var opp = _client.GetOpponent();
@@ -184,9 +188,14 @@ namespace TcpServer
             _client.SetOpponent(null);
         }
 
-        // ---------------------------------------------------------------------
-        // DB / Auth Logic 
-        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// Validates the provided access token or refreshes tokens if expired/invalid.
+        /// Returns the user id if validation or refresh is successful; otherwise returns null.
+        /// </summary>
+        /// <param name="accessToken">The current access token.</param>
+        /// <param name="refreshToken">The refresh token.</param>
+        /// <returns>An integer user id if valid; otherwise, null.</returns>
         private int? CheckAndRefreshTokens(string accessToken, string refreshToken)
         {
             using (var scope = _rootProvider.CreateScope())
@@ -195,29 +204,25 @@ namespace TcpServer
 
                 try
                 {
-                    // 1) Attempt Validate
+                    // 1) Attempt to validate the access token.
                     var (isValid, userId) = authService.ValidateTokenAsync(accessToken).Result;
                     if (isValid)
                     {
-                        // Already good
                         Console.WriteLine("Already good");
                         return userId;
                     }
                     else
                     {
-                        // Expired or invalid => try refresh
+                        // Token expired or invalid; attempt to refresh.
                         var resp = authService.RefreshAsync(refreshToken).Result;
                         if (resp == null)
                         {
                             Console.WriteLine("Fail for Expired or invalid => try refresh");
-                            // Also invalid => reject
                             _client.SendEncryptedMessage("{\"Type\":\"AutoLoginFail\",\"Data\":{\"Reason\":\"Invalid tokens.\"}}");
                             return null;
                         }
 
                         // If refresh success => return new tokens to client so they store them
-                        // We also store userId in the client handler if you want
-                        // e.g. userId = resp.UserId;
                         Console.WriteLine("Success for Expired or invalid => try refresh");
                         SendNewTokensToClient(resp);
                         return resp.UserId;
@@ -231,6 +236,10 @@ namespace TcpServer
             }
         }
 
+        /// <summary>
+        /// Sends new tokens to the client by constructing an AutoLoginSuccess JSON object and sending it as an encrypted message.
+        /// </summary>
+        /// <param name="resp">The AuthResponseDTO containing new token data.</param>
         private void SendNewTokensToClient(AuthResponseDTO resp)
         {
             var obj = new
@@ -250,8 +259,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// "RegisterUser" => create user, increment global stats, auto-login, etc.
+        /// Handles the "RegisterUser" message by creating a new user, updating global stats,
+        /// and performing auto-login. Returns a success or failure message to the client.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the registration request.</param>
         private async void HandleRegisterUser(JObject msgObj)
         {
             // { "Type":"RegisterUser", "Data": {"Username":"...","Password":"..."}}
@@ -259,10 +270,8 @@ namespace TcpServer
             string username = dataObj["Username"]?.ToString();
             string password = dataObj["Password"]?.ToString();
 
-            // 1) Create a new scope
             using (var scope = _rootProvider.CreateScope())
             {
-                // 2) Resolve the services
                 var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
                 var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
                 var globalStatsService = scope.ServiceProvider.GetRequiredService<IGlobalGameStatsService>();
@@ -284,13 +293,12 @@ namespace TcpServer
                         Username = username,
                         Password = password,
                         Avatar = "temp_avatar.png"
-                        //Avatar = null // or pass some field
                     });
 
-                    // Increment total_users in global_game_stats
+                    // Increment total users in global stats.
                     await globalStatsService.IncrementTotalUsersAsync(1, 1);
 
-                    // auto-login
+                    // Auto-login user.
                     var authResp = await authService.LoginAsync(username, password);
                     if (authResp == null)
                     {
@@ -299,7 +307,7 @@ namespace TcpServer
                         return;
                     }
 
-                    _client.SetUserId(userId); // <--- store the user id in this ClientHandler
+                    _client.SetUserId(userId); // Store userId
 
                     var success = new
                     {
@@ -325,8 +333,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// "LoginUser" => validate credentials, return tokens, store userId in client.
+        /// Handles the "LoginUser" message by validating credentials and returning tokens to the client.
+        /// Also stores the userId in the client handler.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the login request.</param>
         private async void HandleLoginUser(JObject msgObj)
         {
             JObject dataObj = (JObject)msgObj["Data"];
@@ -349,7 +359,7 @@ namespace TcpServer
                     }
 
                     var user = await userService.GetUserByUsernameAsync(username);
-                    _client.SetUserId(user.UserId); // <--- store the user id in this ClientHandler
+                    _client.SetUserId(user.UserId); // Store userId
 
                     var success = new
                     {
@@ -375,8 +385,9 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// "UpdateLastLogin" => set user.LastLogin = now in the DB.
+        /// Handles the "UpdateLastLogin" message by updating the user's last login time in the database.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the update request.</param>
         private async void HandleUpdateLastLogin(JObject msgObj)
         {
             JObject dataObj = (JObject)msgObj["Data"];
@@ -398,22 +409,12 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// "GameOverDetailed" => create a session record, update user stats, etc.
+        /// Handles the "GameOverDetailed" message by creating a game session record,
+        /// updating user statistics, and incrementing global stats.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the game over details.</param>
         private async void HandleGameOverDetailed(JObject msgObj)
         {
-            //Example structure:
-            // { "Type":"GameOverDetailed",
-            //   "Data": {
-            //     "User1Id": 5,
-            //     "User2Id": 9 or null,
-            //     "Mode": "SinglePlayer" or "Multiplayer",
-            //     "WonUserId": 5 or null,
-            //     "FinalWave": 20,
-            //     "TimePlayed": 300 // in seconds
-            //   }
-            // }
-
             JObject dataObj = (JObject)msgObj["Data"];
             int user1Id = dataObj["User1Id"]?.ToObject<int>() ?? -1;
             int? user2Id = dataObj["User2Id"]?.ToObject<int?>();
@@ -431,7 +432,7 @@ namespace TcpServer
                 try
                 {
                     DateTime endTime = DateTime.UtcNow;
-                    // We compute StartTime by subtracting timePlayed (seconds) from endTime
+                    // Compute startTime by subtracting timePlayed seconds from the current time.
                     DateTime startTime = endTime.AddSeconds(-timePlayed);
 
                     var sessionDto = new GameSessionDTO
@@ -451,7 +452,6 @@ namespace TcpServer
                     bool user1Won = (wonUserId == user1Id);
                     await userGameStatsService.IncrementGamesPlayedAsync(user1Id, user1Won, isSinglePlayer);
 
-                    // user2 if present
                     if (user2Id.HasValue)
                     {
                         bool user2Won = (wonUserId == user2Id);
@@ -470,18 +470,14 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// "AutoLogin" => validate or refresh tokens, then return new or same tokens if success.
+        /// Handles the "AutoLogin" message by validating the provided access token.
+        /// If the token is valid, returns the token as is; otherwise, attempts to refresh it.
+        /// In either case, sends an AutoLoginSuccess message with the tokens if successful,
+        /// or an AutoLoginFail message if not.
         /// </summary>
+        /// <param name="msgObj">The JSON object representing the auto-login request.</param>
         private async void HandleAutoLogin(JObject msgObj)
         {
-            // e.g. {
-            //   "Type":"AutoLogin",
-            //   "Data":{
-            //     "AccessToken":"...maybe expired...",
-            //     "RefreshToken":"...maybe valid..."
-            //   }
-            // }
-
             JObject dataObj = (JObject)msgObj["Data"];
             string accessToken = dataObj["AccessToken"]?.ToString();
             string refreshToken = dataObj["RefreshToken"]?.ToString();
@@ -496,12 +492,12 @@ namespace TcpServer
                 var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
                 try
                 {
-                    // 1) First try ValidateTokenAsync on the existing access token
+                    // 1) Attempt to validate the existing access token.
                     var (isValid, userId) = await authService.ValidateTokenAsync(accessToken);
                     Console.WriteLine("isValid: " + isValid);
                     if (isValid)
                     {
-                        // The old token is still good (not expired). Keep the same access token
+                        // Token is valid, so send the same token back.
                         _client.SetUserId(userId);
                         SendAutoLoginSuccess(userId, accessToken, null, refreshToken, null);
                         Console.WriteLine($"[ServerMessageHandler] AutoLogin => userId={userId} (token still valid)");
@@ -509,16 +505,16 @@ namespace TcpServer
                     else
                     {
                         Console.WriteLine("refreshToken:" + refreshToken);
-                        // 2) The access token is invalid or expired => Try refresh
+                        // 2) If token is invalid or expired, try to refresh.
                         var resp = await authService.RefreshAsync(refreshToken);
                         if (resp == null)
                         {
-                            // refresh token also invalid => fail
+                            // Refresh failed: send AutoLoginFail.
                             SendAutoLoginFail("Expired or invalid access/refresh token. Must re-login.");
                             return;
                         }
 
-                        // If refresh succeeded => we got new access token & refresh token
+                        // Refresh succeeded: send new tokens to the client.
                         _client.SetUserId(resp.UserId);
                         SendAutoLoginSuccess(
                             resp.UserId,
@@ -537,10 +533,16 @@ namespace TcpServer
             }
         }
 
+        /// <summary>
+        /// Constructs and sends an AutoLoginSuccess message to the client containing the provided tokens.
+        /// </summary>
+        /// <param name="userId">The user id associated with the tokens.</param>
+        /// <param name="accessToken">The access token.</param>
+        /// <param name="accessTokenExpiry">The expiry time for the access token.</param>
+        /// <param name="refreshToken">The refresh token.</param>
+        /// <param name="refreshTokenExpiry">The expiry time for the refresh token.</param>
         private void SendAutoLoginSuccess(int userId, string accessToken, DateTime? accessTokenExpiry, string refreshToken, DateTime? refreshTokenExpiry)
         {
-            // Return new or same tokens so the client can store them
-            // If we didn't reissue the same, you can pass null for unused fields
             var obj = new
             {
                 Type = "AutoLoginSuccess",
@@ -557,6 +559,10 @@ namespace TcpServer
             _client.SendEncryptedMessage(json);
         }
 
+        /// <summary>
+        /// Sends an AutoLoginFail message to the client with the specified reason.
+        /// </summary>
+        /// <param name="reason">The reason for the login failure.</param>
         private void SendAutoLoginFail(string reason)
         {
             string fail = $"{{\"Type\":\"AutoLoginFail\",\"Data\":{{\"Reason\":\"{reason}\"}}}}";

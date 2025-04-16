@@ -5,10 +5,19 @@ using System.Security.Cryptography;
 namespace TcpServer
 {
     /// <summary>
-    /// Static utility for AES encryption/decryption on the server side.
+    /// Provides AES encryption and decryption utilities for securing messages
+    /// between the server and clients after the initial RSA handshake.
     /// </summary>
     public static class AesEncryptionServer
     {
+        /// <summary>
+        /// Encrypts the specified plaintext using AES with the given key and IV,
+        /// then returns the ciphertext as a Base64‐encoded string.
+        /// </summary>
+        /// <param name="plainText">The UTF‑8 text to encrypt.</param>
+        /// <param name="key">The AES key bytes.</param>
+        /// <param name="iv">The AES initialization vector bytes.</param>
+        /// <returns>A Base64 string representing the encrypted data.</returns>
         public static string EncryptAES(string plainText, byte[] key, byte[] iv)
         {
             using (Aes aes = Aes.Create())
@@ -25,6 +34,14 @@ namespace TcpServer
             }
         }
 
+        /// <summary>
+        /// Decrypts the specified Base64‑encoded ciphertext using AES with the given key and IV,
+        /// then returns the result as a UTF‑8 plaintext string.
+        /// </summary>
+        /// <param name="cipherBase64">The Base64 string containing AES‑encrypted data.</param>
+        /// <param name="key">The AES key bytes.</param>
+        /// <param name="iv">The AES initialization vector bytes.</param>
+        /// <returns>The decrypted plaintext string.</returns>
         public static string DecryptAES(string cipherBase64, byte[] key, byte[] iv)
         {
             using (Aes aes = Aes.Create())

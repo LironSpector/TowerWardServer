@@ -8,35 +8,95 @@ using System.Security.Cryptography;
 namespace TcpServer
 {
     /// <summary>
-    /// Per-client connection. Reads data in a loop, does RSA handshake,
-    /// then passes decrypted messages to ServerMessageHandler.
+    /// Per-client connection. Reads data in a loop, performs the RSA handshake to establish AES encryption,
+    /// and then passes decrypted messages to the ServerMessageHandler.
     /// </summary>
     public class ClientHandler
     {
-        // The parent server for matchmaking, removal, etc.
+        /// <summary>
+        /// Gets the parent GameTcpServer responsible for handling matchmaking and client removal.
+        /// </summary>
         private readonly GameTcpServer _server;
+
+        /// <summary>
+        /// Gets the root IServiceProvider for dependency injection (used to create scopes for DB/service access).
+        /// </summary>
         private readonly IServiceProvider _rootProvider;
 
-        // Networking
-        private readonly TcpClient _clientSocket;
-        private readonly NetworkStream _stream;
-        private readonly byte[] _buffer = new byte[4096];
+        #region Networking Fields
 
-        // Opponent reference (if matched)
+        /// <summary>
+        /// The TcpClient instance representing the connected client.
+        /// </summary>
+        private readonly TcpClient _clientSocket;
+
+        /// <summary>
+        /// The NetworkStream obtained from the TcpClient for reading and writing data.
+        /// </summary>
+        private readonly NetworkStream _stream;
+
+        #endregion
+
+        #region Client State Fields
+
+        /// <summary>
+        /// The opponent ClientHandler, if the client is matched with another client.
+        /// </summary>
         private ClientHandler _opponent;
 
+        /// <summary>
+        /// Gets or sets the current match wave index used for matchmaking rounds.
+        /// </summary>
         public int matchWaveIndex = 0;
+
+        /// <summary>
+        /// Gets the user ID associated with the connected client after successful authentication.
+        /// </summary>
         public int? UserId { get; private set; } = null;
 
-        // Encryption 
-        private RSA _rsa; // Unique RSA keypair for this client connection
-        private byte[] _aesKey; // Once handshake is done
-        private byte[] _aesIV; // Once handshake is done
+        #endregion
+
+        #region Encryption Fields
+
+        /// <summary>
+        /// The RSA instance used to generate a unique RSA keypair for this client connection.
+        /// </summary>
+        private RSA _rsa;
+
+        /// <summary>
+        /// The AES key derived from the client's handshake, used for decrypting subsequent messages.
+        /// </summary>
+        private byte[] _aesKey;
+
+        /// <summary>
+        /// The AES initialization vector derived from the client's handshake, used for decryption.
+        /// </summary>
+        private byte[] _aesIV;
+
+        /// <summary>
+        /// Indicates whether the initial handshake (RSA/AES exchange) with the client has been successfully completed.
+        /// </summary>
         private bool _handshakeCompleted = false;
 
-        // A sub-handler for messages
+        #endregion
+
+        #region Message Handling
+
+        /// <summary>
+        /// The ServerMessageHandler instance that processes decrypted messages from this client.
+        /// </summary>
         private ServerMessageHandler _messageHandler;
 
+        #endregion
+
+        /// <summary>
+        /// Initializes a new instance of the ClientHandler class.
+        /// Generates a unique RSA keypair for this connection, sends the public key to the client,
+        /// and initializes the ServerMessageHandler.
+        /// </summary>
+        /// <param name="clientSocket">The TcpClient representing the client connection.</param>
+        /// <param name="server">The parent GameTcpServer instance.</param>
+        /// <param name="rootProvider">The root IServiceProvider for creating DI scopes.</param>
         public ClientHandler(TcpClient clientSocket, GameTcpServer server, IServiceProvider rootProvider)
         {
             _clientSocket = clientSocket;
@@ -45,21 +105,19 @@ namespace TcpServer
 
             _stream = _clientSocket.GetStream();
 
-            // Generate a unique RSA key pair for this connection 
-            // and send the public key to the client
-            _rsa = RSA.Create(2048); // 2048-bit for better security
+            // Generate a unique RSA key pair for this client connection (2048-bit for better security)
+            _rsa = RSA.Create(2048);
 
+            // Send the RSA public key to the client so they can encrypt the AES key and IV.
             SendPublicKey();
 
-            // Initialize the server message handler, pass 'this' so it can:
-            //    - read or set 'UserId'
-            //    - call 'SendEncryptedMessage(...)', etc.
+            // Initialize the server message handler, which will process subsequent messages.
             _messageHandler = new ServerMessageHandler(this, _rootProvider);
         }
 
         /// <summary>
-        /// Main loop for receiving messages: read length prefix, 
-        /// read data, decrypt (if handshake done), handle message, etc.
+        /// Main loop for receiving messages from the client.
+        /// Reads length-prefixed messages, decrypts them (post-handshake), and passes them to the message handler.
         /// </summary>
         public void Process()
         {
@@ -67,13 +125,13 @@ namespace TcpServer
             {
                 while (true)
                 {
-                    // 1) Read 4 bytes for length
+                    // 1) Read 4 bytes for message length.
                     byte[] lengthBuffer = new byte[4];
                     int bytesRead = _stream.Read(lengthBuffer, 0, 4);
                     if (bytesRead == 0) break; // connection closed
                     int messageLength = BitConverter.ToInt32(lengthBuffer, 0);
 
-                    // 2) Read message
+                    // 2) Read the actual message.
                     byte[] messageBuffer = new byte[messageLength];
                     int totalBytesRead = 0;
                     while (totalBytesRead < messageLength)
@@ -84,18 +142,18 @@ namespace TcpServer
                     }
                     if (totalBytesRead < messageLength) break;
 
-                    // 3) Convert to string
+                    // 3) Convert the message bytes to a UTF-8 string.
                     string receivedData = Encoding.UTF8.GetString(messageBuffer, 0, totalBytesRead);
 
-                    // Handshake or normal message
+                    // 4) If handshake isn't complete, process handshake; otherwise, decrypt and handle message.
                     if (!_handshakeCompleted)
                     {
-                        // Unencrypted handshake step
+                        // Process unencrypted handshake messages.
                         HandleHandshakeMessage(receivedData);
                     }
                     else
                     {
-                        // Decrypt with AES, then pass to message handler
+                        // Decrypt the data using AES and then handle the JSON message.
                         string decryptedJson = AesEncryptionServer.DecryptAES(receivedData, _aesKey, _aesIV);
                         _messageHandler.HandleMessage(decryptedJson);
                     }
@@ -107,10 +165,10 @@ namespace TcpServer
             }
             finally
             {
-                // Cleanup
+                // Cleanup when the client disconnects.
                 Console.WriteLine($"[ClientHandler] Client ended: {this}");
 
-                // Notify opponent if we had one
+                // Notify the opponent if one exists.
                 if (_opponent != null)
                 {
                     _opponent.SendEncryptedMessage("{\"Type\":\"OpponentDisconnected\"}");
@@ -123,10 +181,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// Process the handshake message (e.g., "AESKeyExchange")
-        /// before we set _handshakeCompleted = true.
-        /// Called when we receive a message but the handshake hasn't completed. Possibly it's the AES key exchange from the client.
+        /// Processes the handshake message from the client, such as the "AESKeyExchange".
+        /// Decrypts the AES key and IV using RSA and marks the handshake as complete.
         /// </summary>
+        /// <param name="data">The received handshake message in string format.</param>
         private void HandleHandshakeMessage(string data)
         {
             Console.WriteLine("[ClientHandler] Handshake Phase - received => " + data);
@@ -141,7 +199,7 @@ namespace TcpServer
                 byte[] encKey = Convert.FromBase64String(encKeyBase64);
                 byte[] encIV = Convert.FromBase64String(encIVBase64);
 
-                // Decrypt with RSA
+                // Decrypt the AES key and IV using RSA.
                 _aesKey = _rsa.Decrypt(encKey, RSAEncryptionPadding.OaepSHA1);
                 _aesIV = _rsa.Decrypt(encIV, RSAEncryptionPadding.OaepSHA1);
 
@@ -149,7 +207,7 @@ namespace TcpServer
 
                 Console.WriteLine("[ClientHandler] AES handshake complete. Key & IV established.");
 
-
+                // Debug output for AES key and IV.
                 Console.WriteLine("server _aesKey:");
                 for (int i = 0; i < _aesKey.Length; i++)
                 {
@@ -174,8 +232,8 @@ namespace TcpServer
         /// </summary>
         private void SendPublicKey()
         {
-            var rsaParams = _rsa.ExportParameters(false); // public only
-            // e.g.: { "Type":"ServerPublicKey", "Modulus":"...", "Exponent":"..." }
+            var rsaParams = _rsa.ExportParameters(false); // Export only the public parameters.
+            // Construct JSON message for the public key.
             JObject pubKeyJson = new JObject
             {
                 ["Type"] = "ServerPublicKey",
@@ -187,9 +245,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// Sends a message unencrypted (raw) with length prefix.
-        /// Used only for handshake messages (like public key).
+        /// Sends a raw, unencrypted message to the client with a length prefix.
+        /// This method is primarily used for sending handshake messages.
         /// </summary>
+        /// <param name="msg">The message string to send.</param>
         private void SendRaw(string msg)
         {
             byte[] messageBytes = Encoding.UTF8.GetBytes(msg);
@@ -199,8 +258,10 @@ namespace TcpServer
         }
 
         /// <summary>
-        /// Sends a message AES-encrypted (post-handshake) with length prefix.
+        /// Sends a message to the client after encrypting it with AES.
+        /// The encrypted message is sent with a length prefix.
         /// </summary>
+        /// <param name="plainJson">The plaintext JSON message to encrypt and send.</param>
         public void SendEncryptedMessage(string plainJson)
         {
             if (!_handshakeCompleted)
@@ -208,39 +269,49 @@ namespace TcpServer
                 Console.WriteLine("[ClientHandler] ERROR: Attempt to send encrypted message before handshake!");
                 return;
             }
-            // 1) Encrypt
+            // Encrypt the plain JSON using AES.
             string cipherBase64 = AesEncryptionServer.EncryptAES(plainJson, _aesKey, _aesIV);
 
-            // 2) Send length + cipher
+            // Send the encrypted message using the raw sending method.
             SendRaw(cipherBase64);
         }
 
         /// <summary>
-        /// Called by the server or by the message handler to set an opponent reference.
+        /// Sets the opponent client that is paired with this client.
         /// </summary>
+        /// <param name="opponent">The ClientHandler representing the opponent.</param>
         public void SetOpponent(ClientHandler opponent)
         {
             _opponent = opponent;
         }
 
         /// <summary>
-        /// Exposes the opponent reference if needed by the message handler.
+        /// Retrieves the current opponent client.
         /// </summary>
+        /// <returns>The ClientHandler of the opponent, or null if none is set.</returns>
         public ClientHandler GetOpponent()
         {
             return _opponent;
         }
 
         /// <summary>
-        /// Allows the message handler to store the user id once we validate tokens or login.
+        /// Stores the authenticated user's ID in this client handler.
         /// </summary>
+        /// <param name="userId">The user ID to store.</param>
         public void SetUserId(int userId)
         {
             this.UserId = userId;
         }
 
+        /// <summary>
+        /// Gets the parent GameTcpServer instance for this client.
+        /// </summary>
         public GameTcpServer Server => _server;
 
+        /// <summary>
+        /// Returns a string representation of the client handler, including its remote endpoint and user ID.
+        /// </summary>
+        /// <returns>A string identifying the client handler.</returns>
         public override string ToString()
         {
             return $"ClientHandler({_clientSocket.Client.RemoteEndPoint}, UserId={UserId})";
