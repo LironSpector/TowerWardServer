@@ -4,26 +4,37 @@ using Repositories;
 
 namespace Services
 {
+    /// <summary>
+    /// Implements <see cref="IGlobalGameStatsService"/> to manage
+    /// creation, retrieval, updating, and deletion of global game statistics,
+    /// as well as convenience increment methods.
+    /// </summary>
     public class GlobalGameStatsService : IGlobalGameStatsService
     {
         private readonly IGlobalGameStatsRepository _globalStatsRepo;
 
+        /// <summary>
+        /// Initializes a new instance of <see cref="GlobalGameStatsService"/>.
+        /// </summary>
+        /// <param name="globalStatsRepo">
+        /// Repository for accessing <see cref="GlobalGameStats"/> entities.
+        /// </param>
         public GlobalGameStatsService(IGlobalGameStatsRepository globalStatsRepo)
         {
             _globalStatsRepo = globalStatsRepo;
         }
 
+        /// <inheritdoc/>
         public async Task<GlobalGameStatsDTO> GetGlobalStatsAsync(int id)
         {
             var stats = await _globalStatsRepo.GetByIdAsync(id);
             if (stats == null) return null;
-
             return MapToDTO(stats);
         }
 
+        /// <inheritdoc/>
         public async Task CreateGlobalStatsAsync(GlobalGameStatsDTO statsDto)
         {
-            // Usually you'd check if a record for the same ID already exists
             var existing = await _globalStatsRepo.GetByIdAsync(statsDto.Id);
             if (existing != null)
                 throw new Exception($"Global stats with id={statsDto.Id} already exist.");
@@ -40,6 +51,7 @@ namespace Services
             await _globalStatsRepo.AddAsync(entity);
         }
 
+        /// <inheritdoc/>
         public async Task UpdateGlobalStatsAsync(GlobalGameStatsDTO statsDto)
         {
             var entity = await _globalStatsRepo.GetByIdAsync(statsDto.Id);
@@ -54,6 +66,7 @@ namespace Services
             await _globalStatsRepo.UpdateAsync(entity);
         }
 
+        /// <inheritdoc/>
         public async Task DeleteGlobalStatsAsync(int id)
         {
             var entity = await _globalStatsRepo.GetByIdAsync(id);
@@ -63,6 +76,7 @@ namespace Services
             await _globalStatsRepo.DeleteAsync(entity);
         }
 
+        /// <inheritdoc/>
         public async Task IncrementTotalUsersAsync(int id, int amount = 1)
         {
             var stats = await _globalStatsRepo.GetByIdAsync(id);
@@ -73,6 +87,7 @@ namespace Services
             await _globalStatsRepo.UpdateAsync(stats);
         }
 
+        /// <inheritdoc/>
         public async Task IncrementGamesPlayedAsync(int id, bool singlePlayer)
         {
             var stats = await _globalStatsRepo.GetByIdAsync(id);
@@ -88,10 +103,11 @@ namespace Services
             await _globalStatsRepo.UpdateAsync(stats);
         }
 
-        // -----------------------------------------------------------------
-        // PRIVATE HELPER
-        // -----------------------------------------------------------------
-
+        /// <summary>
+        /// Maps a <see cref="GlobalGameStats"/> entity to its corresponding DTO.
+        /// </summary>
+        /// <param name="entity">The entity to map.</param>
+        /// <returns>A <see cref="GlobalGameStatsDTO"/> with the mapped values.</returns>
         private GlobalGameStatsDTO MapToDTO(GlobalGameStats entity)
         {
             return new GlobalGameStatsDTO

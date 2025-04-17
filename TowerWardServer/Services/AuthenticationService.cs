@@ -1,5 +1,4 @@
-﻿// ------------ New AuthenticationService - after JWT validation in server ------------
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
@@ -11,12 +10,19 @@ using Settings;
 
 namespace Services
 {
+    /// <summary>
+    /// Handles user authentication: login (password → JWT + refresh token),
+    /// refresh of tokens, token validation, and revocation of all tokens.
+    /// </summary>
     public class AuthenticationService : IAuthenticationService
     {
         private readonly IUserRepository _userRepository;
         private readonly IAuthenticationRepository _authRepo;
         private readonly JwtSettings _jwtSettings;
 
+        /// <summary>
+        /// Constructs the service with required repositories and JWT settings.
+        /// </summary>
         public AuthenticationService(
             IUserRepository userRepository,
             IAuthenticationRepository authRepo,
@@ -28,8 +34,15 @@ namespace Services
         }
 
         /// <summary>
-        /// Logs in via username/password. Returns null if invalid credentials.
+        /// Validates the provided username/password, issues a new access token and refresh token,
+        /// persists the refresh token to the database, and returns both tokens.
         /// </summary>
+        /// <param name="username">The user's login name.</param>
+        /// <param name="password">The raw password to verify.</param>
+        /// <returns>
+        /// An <see cref="AuthResponseDTO"/> containing the tokens and expiry times,
+        /// or <c>null</c> if credentials are invalid.
+        /// </returns>
         public async Task<AuthResponseDTO> LoginAsync(string username, string password)
         {
             // 1) Get user by username
@@ -66,17 +79,18 @@ namespace Services
         }
 
         /// <summary>
-        /// Uses the existing refresh token to generate a new access token.
-        /// If the refresh token is invalid or expired, returns null.
+        /// Exchanges a valid, unexpired refresh token for a new access token (and refresh token).
         /// </summary>
+        /// <param name="refreshToken">The existing refresh token to renew.</param>
+        /// <returns>
+        /// A new <see cref="AuthResponseDTO"/> if the token was valid; otherwise <c>null</c>.
+        /// </returns>
         public async Task<AuthResponseDTO> RefreshAsync(string refreshToken)
         {
-            Console.WriteLine("Check Num 0");
             // 1) Lookup refresh token record
             var authRecord = await _authRepo.GetByRefreshTokenAsync(refreshToken);
             if (authRecord == null) return null;
 
-            Console.WriteLine("Check Num 1");
             // 2) Check expiry
             if (authRecord.ExpiryTime < DateTime.UtcNow)
             {
@@ -86,14 +100,11 @@ namespace Services
                 return null;
             }
 
-            var userId = authRecord.UserId;
-            Console.WriteLine("Check Num 2, userId: " + userId);
+            int userId = authRecord.UserId;
 
             // 3) Generate new tokens
             var (accessToken, accessExpires) = GenerateAccessToken(userId);
-            Console.WriteLine("Check Num 3");
             var (newRefreshToken, newRefreshExpires) = GenerateRefreshToken();
-            Console.WriteLine("Check Num 4");
 
             // 4) Update DB record
             authRecord.RefreshToken = newRefreshToken;
@@ -108,35 +119,34 @@ namespace Services
                 AccessTokenExpiry = accessExpires,
                 RefreshToken = newRefreshToken,
                 RefreshTokenExpiry = newRefreshExpires,
-                // optionally store userId if you want
                 UserId = userId
             };
         }
 
         /// <summary>
-        /// Revoke all refresh tokens for a user. Typically used for "global logout" or admin action.
+        /// Deletes all refresh tokens associated with the given user.
         /// </summary>
+        /// <param name="userId">The user whose tokens should be revoked.</param>
         public async Task RevokeAllAsync(int userId)
         {
             await _authRepo.RevokeAllTokensForUserAsync(userId);
         }
 
-        // -----------------------------------------------------------------
-        // NEW: VALIDATE TOKEN ASYNC
-        // -----------------------------------------------------------------
-
         /// <summary>
-        /// Validates the given JWT access token. 
-        /// Returns (IsValid=false, UserId=0) if invalid or expired.
-        /// Otherwise, returns (IsValid=true, UserId=[extracted from 'sub' claim]).
+        /// Validates a JWT access token and extracts the user ID ("sub" claim).
         /// </summary>
+        /// <param name="token">The JWT string to validate.</param>
+        /// <returns>
+        /// A tuple where <c>IsValid</c> is <c>true</c> if the token signature and expiry are valid,
+        /// and <c>UserId</c> contains the parsed subject claim; otherwise <c>(false, 0)</c>.
+        /// </returns>
         public async Task<(bool IsValid, int UserId)> ValidateTokenAsync(string token)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
+            var handler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes(_jwtSettings.SecretKey);
+
             try
             {
-                // Define how we validate the token
                 var parameters = new TokenValidationParameters
                 {
                     ValidateIssuer = false,
@@ -148,30 +158,17 @@ namespace Services
 
                 Console.WriteLine("Console 1");
                 // Validate the token
-                var principal = tokenHandler.ValidateToken(token, parameters, out var validatedToken);
-                Console.WriteLine("Console 2");
+                var principal = handler.ValidateToken(token, parameters, out var validatedToken);
 
-                // (Optional) Check the token is a proper JWT, etc.
+                // Check the token is a proper JWT
                 if (!(validatedToken is JwtSecurityToken jwtToken)
                     || !jwtToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
                 {
                     return (false, 0);
                 }
-                Console.WriteLine("Console 3");
 
-                // - Extract the user id from "sub" claim -
-
-                //The line below doesn't work, because by default, "sub" is mapped to "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier" (the
-                //same as ClaimTypes.NameIdentifier). If I call FindFirst(ClaimTypes.NameIdentifier), I will find the value of "sub".
-                //var userIdClaim = principal.FindFirst(JwtRegisteredClaimNames.Sub);
-
-                var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier); //This line is the correct one
-                if (userIdClaim == null)
-                {
-                    return (false, 0);
-                }
-                Console.WriteLine("Console 4");
-                if (!int.TryParse(userIdClaim.Value, out int userId))
+                var idClaim = principal.FindFirst(ClaimTypes.NameIdentifier);
+                if (idClaim == null || !int.TryParse(idClaim.Value, out int userId))
                 {
                     return (false, 0);
                 }
@@ -185,9 +182,9 @@ namespace Services
             }
         }
 
-        // -----------------------------------------------------
-        // HELPER METHODS
-        // -----------------------------------------------------
+        /// <summary>
+        /// Generates a signed JWT access token containing the "sub" claim for the user.
+        /// </summary>
         private (string token, DateTime expiry) GenerateAccessToken(int userId)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
@@ -201,22 +198,23 @@ namespace Services
 
             var expiry = DateTime.UtcNow.AddMinutes(_jwtSettings.AccessTokenExpirationMinutes);
 
-            var token = new JwtSecurityToken(
+            var jwt = new JwtSecurityToken(
                 issuer: _jwtSettings.Issuer,
                 audience: _jwtSettings.Audience,
                 claims: claims,
                 expires: expiry,
                 signingCredentials: creds);
 
-            var jwt = new JwtSecurityTokenHandler().WriteToken(token);
-            return (jwt, expiry);
+            return (new JwtSecurityTokenHandler().WriteToken(jwt), expiry);
         }
 
+        /// <summary>
+        /// Creates a new opaque refresh token as a GUID string and sets its expiry.
+        /// </summary>
         private (string token, DateTime expiry) GenerateRefreshToken()
         {
             var refreshToken = Guid.NewGuid().ToString("N");
             var expiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
-
             return (refreshToken, expiry);
         }
     }
