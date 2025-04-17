@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TowerWardServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8fdd52b123345fc70700aa32c30419fd230cd007")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+93c4d33f3c0dcaaf37c160d1007a83afbd27d2dd")]
 [assembly: System.Reflection.AssemblyProductAttribute("TowerWardServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TowerWardServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

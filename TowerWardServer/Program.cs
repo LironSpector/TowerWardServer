@@ -1,6 +1,4 @@
-﻿// New Program.cs - after removing http & controllers code which was irrelevant
-//// --------- Program.cs with Async Main() function to be able to also run all the database tests ---------
-
+﻿//// --------- Program.cs with Async Main() function to be able to also run all the database tests ---------
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

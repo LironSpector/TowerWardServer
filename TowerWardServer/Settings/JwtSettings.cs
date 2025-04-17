@@ -1,29 +1,33 @@
 ﻿namespace Settings
 {
+    /// <summary>
+    /// Configuration options for JWT token issuance and validation.
+    /// Loaded from the "JwtSettings" section in appsettings.json.
+    /// </summary>
     public class JwtSettings
     {
         /// <summary>
-        /// Secret key used to sign JWT tokens.
+        /// Secret key used to sign and verify JWT access tokens.
         /// </summary>
         public string SecretKey { get; set; }
 
         /// <summary>
-        /// Issuer for the token (optional).
+        /// Identifier for the token issuer (optional; may be used in validation).
         /// </summary>
         public string Issuer { get; set; }
 
         /// <summary>
-        /// Audience for the token (optional).
+        /// Intended audience for the token (optional; may be used in validation).
         /// </summary>
         public string Audience { get; set; }
 
         /// <summary>
-        /// Access token lifespan in minutes (for short-living tokens).
+        /// Lifespan of an access token, in minutes (short-lived token).
         /// </summary>
         public int AccessTokenExpirationMinutes { get; set; } = 30;
 
         /// <summary>
-        /// Refresh token lifespan in days (for longer-living tokens).
+        /// Lifespan of a refresh token, in days (longer-lived token).
         /// </summary>
         public int RefreshTokenExpirationDays { get; set; } = 7;
     }
