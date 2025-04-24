@@ -1,16 +1,10 @@
 ﻿//// --------- Program.cs with Async Main() function to be able to also run all the database tests ---------
-using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Database;
 using Repositories;
 using Services;
 using Settings;
 using TcpServer;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Tests;
 using AdminTools;
 
@@ -61,8 +55,6 @@ namespace GameSolution
                     services.AddScoped<IGameSessionService, GameSessionService>();
                     services.AddScoped<IGlobalGameStatsService, GlobalGameStatsService>();
                     services.AddScoped<IAuthenticationService, AuthenticationService>();
-
-                    // (Optional) You can register other services here if needed.
                 });
 
             // Build the host

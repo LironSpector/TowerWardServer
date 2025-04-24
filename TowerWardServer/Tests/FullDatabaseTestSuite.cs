@@ -44,14 +44,14 @@ namespace Tests
                 await TestUserCrudOperations(userService);
 
                 // 3) Test user game stats creation, increments, updates, deletion, etc.
-                //    (We'll also test synergy with the user we created in #2)
+                //    (Also test synergy with the user created in #2)
                 await TestUserGameStatsOperations(userService, statsService);
 
                 // 4) Test game session creation, update, end session, delete, etc.
                 await TestGameSessions(userService, sessionService);
 
                 // 5) Test authentication: login, invalid login, refresh, revoke, etc.
-                //    We'll create a dedicated user for these auth tests to avoid messing up
+                //    Create a dedicated user for these auth tests to avoid messing up
                 //    the user from #2 and #3 tests.
                 await TestAuthenticationFlow(userService, authService);
 
@@ -76,11 +76,10 @@ namespace Tests
         {
             Console.WriteLine("Running Test #1: Global Stats...");
 
-            // We'll pick an ID to store global stats. Often you store a single row with ID=1
-            // or you might have multiple rows for different "seasons", etc.
+            // Pick an ID to store global stats. Different one from the ID=1 that I have for the real data
             int globalStatsId = 99;
 
-            // Attempt to delete any existing record for our test row
+            // Attempt to delete any existing record for the test row
             var existing = await globalStatsService.GetGlobalStatsAsync(globalStatsId);
             if (existing != null)
             {
@@ -160,7 +159,7 @@ namespace Tests
 
             Console.WriteLine("Verified increment methods for global stats.");
 
-            // 6) Clean up (optional). For demonstration, let's keep them for reference, or you can delete them:
+            // 6) Clean up (optional)
             await globalStatsService.DeleteGlobalStatsAsync(globalStatsId);
             Console.WriteLine("Deleted test global stats record.");
 
@@ -174,8 +173,7 @@ namespace Tests
         {
             Console.WriteLine("Running Test #2: User CRUD operations...");
 
-            // We will create a user, read it, update it, ban/unban it, etc.
-            // Then possibly delete it at the end.
+            // Create a user, read it, update it, ban/unban it, and more.
 
             // 1) Create a user
             string testUsername = "TestUser_" + GenerateRandomSuffix();
@@ -251,7 +249,7 @@ namespace Tests
             Console.WriteLine("Verified user unban.");
 
             // 7) Delete user
-            // Optionally, test the delete. We'll do it for completeness.
+            // Optionally, test the delete
             await userService.DeleteUserAsync(newUserId);
 
             // Confirm deletion
@@ -274,9 +272,8 @@ namespace Tests
         {
             Console.WriteLine("Running Test #3: User Game Stats...");
 
-            // We'll create a new user in order to test stats. Typically, your
-            // CreateUserAsync call automatically creates a stats record, but let's
-            // confirm we can do it from scratch as well.
+            // Create a new user in order to test stats. Typically, the
+            // CreateUserAsync call automatically creates a stats record, but I decided to test it anyway.
 
             // 1) Create a user
             string userName = "StatsUser_" + GenerateRandomSuffix();
@@ -380,7 +377,7 @@ namespace Tests
             var afterDelete = await statsService.GetStatsByUserIdAsync(userId);
             if (afterDelete != null)
             {
-                throw new Exception("DeleteStatsAsync: Stats still exist after we attempted to delete them.");
+                throw new Exception("DeleteStatsAsync: Stats still exist after I attempted to delete them.");
             }
             Console.WriteLine("Verified deleting the user's stats record.");
 
@@ -400,7 +397,7 @@ namespace Tests
         {
             Console.WriteLine("Running Test #4: Game Session creation and usage...");
 
-            // We need at least 2 users to test a multiplayer session. Let's create them:
+            // I need at least 2 users to test a multiplayer session. Let's create them:
             var userId1 = await CreateTempUserForSessionTest(userService, "SessionUserA_");
             var userId2 = await CreateTempUserForSessionTest(userService, "SessionUserB_");
 
@@ -492,14 +489,14 @@ namespace Tests
 
             Console.WriteLine("Verified ending multiplayer session.");
 
-            // 7) Retrieve all sessions to ensure we can get them in a collection
+            // 7) Retrieve all sessions to ensure I can get them in a collection
             var allSessions = await sessionService.GetAllSessionsAsync();
             if (allSessions == null || !allSessions.Any())
             {
                 throw new Exception("GetAllSessionsAsync returned empty or null. Expected to see our newly created sessions.");
             }
 
-            Console.WriteLine($"Verified we can fetch all sessions. We see at least {allSessions.Count()} session(s).");
+            Console.WriteLine($"Verified I can fetch all sessions. I see at least {allSessions.Count()} session(s).");
 
             // 8) Delete sessions
             await sessionService.DeleteSessionAsync(spSessionId);
@@ -544,7 +541,7 @@ namespace Tests
         {
             Console.WriteLine("Running Test #5: Authentication Flow...");
 
-            // We'll create a user solely for testing login/refresh scenarios
+            // Create a user solely for testing login/refresh scenarios
             string authUserName = "AuthUser_" + GenerateRandomSuffix();
             var createDto = new CreateUserDTO
             {
@@ -610,15 +607,15 @@ namespace Tests
             {
                 throw new Exception("TestAuthenticationFlow: The old refresh token was reused and accepted, which is unexpected if one-time use is enforced.");
             }
-            Console.WriteLine("Verified that re-using the old refresh token after first refresh fails (if your logic enforces single use).");
+            Console.WriteLine("Verified that re-using the old refresh token after first refresh fails.");
 
             // 7) Revoke all tokens
             await authService.RevokeAllAsync(userId);
-            // Attempting to refresh again with the new refresh token we got from (5) should fail now.
+            // Attempting to refresh again with the new refresh token I got from (5) should fail now.
             var postRevokeRefresh = await authService.RefreshAsync(refreshResult.RefreshToken);
             if (postRevokeRefresh != null)
             {
-                throw new Exception("TestAuthenticationFlow: We revoked all tokens, but refresh is still successful. RevokeAllAsync might not be working.");
+                throw new Exception("TestAuthenticationFlow: I revoked all tokens, but refresh is still successful. RevokeAllAsync might not be working.");
             }
 
             Console.WriteLine("Verified that RevokeAllAsync invalidates any existing refresh tokens.");
