@@ -14,15 +14,15 @@ namespace Tests
     {
         /// <summary>
         /// Entry point to run all tests.
-        /// Call this method from Program.cs (or anywhere) with:
+        /// Call this method from Program.cs with:
         ///     await FullDatabaseTestSuite.RunAllTestsAsync(host);
         /// </summary>
-        /// <param name="host">The IHost instance to use for creating DI scopes.</param>
+        /// <param name="host">The IHost instance to use for creating dependency injection scopes.</param>
         public static async Task RunAllTestsAsync(IHost host)
         {
             using var scope = host.Services.CreateScope();
 
-            // Retrieve services from DI
+            // Retrieve services from dependency injection
             var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
             var statsService = scope.ServiceProvider.GetRequiredService<IUserGameStatsService>();
             var sessionService = scope.ServiceProvider.GetRequiredService<IGameSessionService>();
@@ -35,7 +35,7 @@ namespace Tests
 
             try
             {
-                //Note for me: Last time I checked, all the tests succeded!
+                //Note for me: Last time I checked, all the tests succeeded!
 
                 // 1) Test Global Game Stats creation and usage
                 await TestGlobalStats(globalStatsService);
@@ -44,7 +44,7 @@ namespace Tests
                 await TestUserCrudOperations(userService);
 
                 // 3) Test user game stats creation, increments, updates, deletion, etc.
-                //    (Also test synergy with the user created in #2)
+                //    (Also tests related with the user created in #2)
                 await TestUserGameStatsOperations(userService, statsService);
 
                 // 4) Test game session creation, update, end session, delete, etc.

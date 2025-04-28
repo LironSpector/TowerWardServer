@@ -39,7 +39,7 @@ namespace GameSolution
                         );
                     });
 
-                    // Re-register JWT Settings for DI so that AuthenticationService receives a valid JwtSettings instance.
+                    // Re-register JWT Settings for dependency injection so that AuthenticationService receives a valid JwtSettings instance.
                     services.Configure<JwtSettings>(hostContext.Configuration.GetSection("JwtSettings"));
 
                     // Register the Repositories

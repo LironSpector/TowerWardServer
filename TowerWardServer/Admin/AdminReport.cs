@@ -16,11 +16,11 @@ namespace AdminTools
         /// Call this method from Program.cs after building the host:
         ///     await AdminReport.PrintAdminReport(host);
         /// </summary>
-        /// <param name="host">The IHost instance (for DI scope creation).</param>
+        /// <param name="host">The IHost instance (for dependency injection scope creation).</param>
         /// <param name="statsId">Which global stats record ID to load (defaults to 1).</param>
         public static async Task PrintAdminReport(IHost host, int statsId = 1)
         {
-            // Create a DI scope using host.Services
+            // Create a dependency injection scope using host.Services
             using var scope = host.Services.CreateScope();
             var globalStatsService = scope.ServiceProvider.GetRequiredService<IGlobalGameStatsService>();
 

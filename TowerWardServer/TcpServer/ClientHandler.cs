@@ -96,7 +96,7 @@ namespace TcpServer
         /// </summary>
         /// <param name="clientSocket">The TcpClient representing the client connection.</param>
         /// <param name="server">The parent GameTcpServer instance.</param>
-        /// <param name="rootProvider">The root IServiceProvider for creating DI scopes.</param>
+        /// <param name="rootProvider">The root IServiceProvider for creating dependency injection scopes.</param>
         public ClientHandler(TcpClient clientSocket, GameTcpServer server, IServiceProvider rootProvider)
         {
             _clientSocket = clientSocket;
@@ -246,7 +246,6 @@ namespace TcpServer
 
         /// <summary>
         /// Sends a raw, unencrypted message to the client with a length prefix.
-        /// This method is primarily used for sending handshake messages.
         /// </summary>
         /// <param name="msg">The message string to send.</param>
         private void SendRaw(string msg)
